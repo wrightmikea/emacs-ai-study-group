@@ -1,0 +1,49 @@
+# Emacs backup and autosave files
+*~
+\#*\#
+.\#*
+.*.swp
+.*.swo
+
+# Compiled Emacs Lisp
+*.elc
+
+# Emacs session files
+.session
+session.*
+.emacs.desktop
+.emacs.desktop.lock
+auto-save-list
+tramp
+
+# Emacs temp files
+.\#*
+*.tmp
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test results (optional - uncomment to exclude all test results)
+# demo-gptel/tests/results/*.txt
+
+# But definitely exclude backup copies in results
+demo-gptel/tests/results/\#*\#
+
+# Python bytecode (if any Python scripts are added)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and editor directories
+.vscode/
+.idea/
+*.sublime-*
+
+# Project-specific
+.dir-locals.el

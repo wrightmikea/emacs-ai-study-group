@@ -1,0 +1,80 @@
+===================================================================
+AI ITERATIVE TEST - Attempt 2 of 5
+===================================================================
+
+Timestamp: Mon Nov  3 13:23:05 2025
+Backend: Ollama
+Model: llama3.2:latest
+
+-------------------------------------------------------------------
+PROMPT SENT TO AI
+-------------------------------------------------------------------
+Write a FizzBuzz function in Emacs Lisp.
+
+-------------------------------------------------------------------
+AI RESPONSE (EXACTLY AS RECEIVED)
+-------------------------------------------------------------------
+```lisp
+(defun fizzbuzz (n)
+  "Print FizzBuzz sequence up to N"
+  (dotimes (i n)
+    (cond ((or (= i %3) (= i %5)) (format t ":Fizz:Buzz:")
+           )
+          (t (format t "%d" i))))
+```
+
+Example usage:
+```lisp
+(fizzbuzz 20)
+```
+This will print the FizzBuzz sequence up to 20.
+
+-------------------------------------------------------------------
+EXTRACTED CODE (NO MODIFICATIONS)
+-------------------------------------------------------------------
+(defun fizzbuzz (n)
+  "Print FizzBuzz sequence up to N"
+  (dotimes (i n)
+    (cond ((or (= i %3) (= i %5)) (format t ":Fizz:Buzz:")
+           )
+          (t (format t "%d" i))))
+
+
+-------------------------------------------------------------------
+MISTAKE ANALYSIS
+-------------------------------------------------------------------
+Status: ✗ 2 MISTAKE(S) DETECTED
+
+  ✗ Uses %N syntax (invalid in Emacs Lisp)
+  ✗ Uses 'format t' (Common Lisp - will fail in Emacs)
+
+-------------------------------------------------------------------
+TEST 1: EVALUATION (Can the code be loaded?)
+-------------------------------------------------------------------
+✗ FAILED - Code failed to evaluate
+   Error: End of file during parsing
+
+-------------------------------------------------------------------
+TEST 2: EXECUTION (Can the function run?)
+-------------------------------------------------------------------
+⊘ SKIPPED - Code did not evaluate
+
+-------------------------------------------------------------------
+TEST 3: OUTPUT VERIFICATION (Is the output correct?)
+-------------------------------------------------------------------
+⊘ SKIPPED - Function did not run successfully
+
+-------------------------------------------------------------------
+SUMMARY
+-------------------------------------------------------------------
+Prompt Quality: Attempt 2 (vague → explicit)
+Evaluation: FAIL
+Execution: N/A
+Output Correct: N/A
+Mistakes Detected: 2
+Overall: ✗ COMPLETELY BROKEN
+
+===================================================================
+NOTE: This shows ONLY what the AI generated.
+NO automatic corrections were applied.
+===================================================================

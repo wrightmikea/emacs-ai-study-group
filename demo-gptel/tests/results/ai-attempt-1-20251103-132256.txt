@@ -1,0 +1,118 @@
+===================================================================
+AI ITERATIVE TEST - Attempt 1 of 5
+===================================================================
+
+Timestamp: Mon Nov  3 13:22:56 2025
+Backend: Ollama
+Model: llama3.2:latest
+
+-------------------------------------------------------------------
+PROMPT SENT TO AI
+-------------------------------------------------------------------
+Write a FizzBuzz function.
+
+-------------------------------------------------------------------
+AI RESPONSE (EXACTLY AS RECEIVED)
+-------------------------------------------------------------------
+```elixir
+defmodule FizzBuzz do
+  @doc """
+  Prints the FizzBuzz sequence up to n.
+
+  ## Example
+
+      iex> FizzBuzz.run(5)
+      [1, 2, "Fizz", 4, "Buzz"]
+      iex> FizzBuzz.run(10)
+      [1, 2, "Fizz", 4, "Buzz", "Fizz", 7, "Jazz", "Fizz", "Buzz"]
+  """
+  def run(n) do
+    result = Enum.map(1..n, fn i ->
+      if rem(i, 3) == 0 and rem(i, 5) != 0 do
+        "Jazz"
+      else when rem(i, 3) == 0 do
+        "Fizz"
+      else when rem(i, 5) == 0 do
+        "Buzz"
+      else
+        i
+      end
+    end)
+    result
+  end
+end
+```
+
+You can call `FizzBuzz.run(n)` to print the sequence up to `n`. Note: I chose Jazz for multiples of 15 in the FizzBuzz tradition.
+
+-------------------------------------------------------------------
+EXTRACTED CODE (NO MODIFICATIONS)
+-------------------------------------------------------------------
+```elixir
+defmodule FizzBuzz do
+  @doc """
+  Prints the FizzBuzz sequence up to n.
+
+  ## Example
+
+      iex> FizzBuzz.run(5)
+      [1, 2, "Fizz", 4, "Buzz"]
+      iex> FizzBuzz.run(10)
+      [1, 2, "Fizz", 4, "Buzz", "Fizz", 7, "Jazz", "Fizz", "Buzz"]
+  """
+  def run(n) do
+    result = Enum.map(1..n, fn i ->
+      if rem(i, 3) == 0 and rem(i, 5) != 0 do
+        "Jazz"
+      else when rem(i, 3) == 0 do
+        "Fizz"
+      else when rem(i, 5) == 0 do
+        "Buzz"
+      else
+        i
+      end
+    end)
+    result
+  end
+end
+```
+
+You can call `FizzBuzz.run(n)` to print the sequence up to `n`. Note: I chose Jazz for multiples of 15 in the FizzBuzz tradition.
+
+-------------------------------------------------------------------
+MISTAKE ANALYSIS
+-------------------------------------------------------------------
+Status: ✗ 1 MISTAKE(S) DETECTED
+
+  ✗ Missing 'defun fizzbuzz' definition
+
+-------------------------------------------------------------------
+TEST 1: EVALUATION (Can the code be loaded?)
+-------------------------------------------------------------------
+✓ SUCCESS - Code evaluated without errors
+
+-------------------------------------------------------------------
+TEST 2: EXECUTION (Can the function run?)
+-------------------------------------------------------------------
+✗ FAILED - Function crashed during execution
+   Error: Symbol’s function definition is void: fizzbuzz
+
+-------------------------------------------------------------------
+TEST 3: OUTPUT VERIFICATION (Is the output correct?)
+-------------------------------------------------------------------
+⊘ SKIPPED - Function did not run successfully
+
+-------------------------------------------------------------------
+SUMMARY
+-------------------------------------------------------------------
+Prompt Quality: Attempt 1 (vague → explicit)
+Evaluation: PASS
+Execution: FAIL
+Output Correct: N/A
+Mistakes Detected: 1
+Overall: ⚠ LOADS BUT CRASHES WHEN RUN
+
+===================================================================
+NOTE: This shows ONLY what the AI generated.
+NO automatic corrections were applied.
+===================================================================

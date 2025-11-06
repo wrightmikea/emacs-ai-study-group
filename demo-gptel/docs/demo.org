@@ -1,0 +1,1660 @@
+#+TITLE: gptel Interactive Demo
+#+AUTHOR: Emacs AI Study Group
+#+DATE: [2025-01-03]
+#+PROPERTY: header-args:emacs-lisp :results output :exports both
+#+STARTUP: showeverything
+
+* Introduction
+
+This document provides a hands-on, reproducible demonstration of gptel, a simple and
+elegant LLM client for Emacs.
+
+*Prerequisites:*
+- API key for at least one LLM provider (OpenAI, Anthropic, Google, etc.)
+  OR Ollama installed for local models
+- gptel package installed from MELPA
+
+*What is gptel?*
+gptel is a simple, no-frills LLM client that:
+- Works with multiple LLM providers
+- Integrates seamlessly with Emacs buffers
+- Supports streaming responses
+- Requires minimal configuration
+- Works in any buffer (not just dedicated chat buffers)
+
+*Supported Backends:*
+- OpenAI (ChatGPT)
+- Anthropic (Claude)
+- Google (Gemini)
+- Ollama (local models)
+- llama.cpp, GPT4All, and more
+
+*How to use this document:*
+1. Position cursor in any code block
+2. Press =C-c C-c= to execute the code
+3. Results will appear below the code block
+
+* Installation and Setup
+
+** Bootstrap Package System (Required for emacs -Q)
+
+If you're running this with =emacs -Q=, execute this block first to set up the package system:
+
+#+BEGIN_SRC emacs-lisp
+;; Initialize package.el
+(require 'package)
+
+;; Add MELPA if not already present
+(unless (assoc "melpa" package-archives)
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t))
+
+;; Initialize packages
+(unless package--initialized
+  (package-initialize))
+
+;; Refresh package contents if needed
+(unless package-archive-contents
+  (message "Refreshing package archive contents...")
+  (package-refresh-contents))
+
+(message "✓ Package system initialized with MELPA")
+#+END_SRC
+
+** Install gptel (If Not Already Installed)
+
+#+BEGIN_SRC emacs-lisp
+(unless (package-installed-p 'gptel)
+  (message "Installing gptel from MELPA...")
+  (condition-case err
+      (progn
+        (package-install 'gptel)
+        (message "✓ gptel installed successfully"))
+    (error
+     (message "✗ Failed to install gptel: %s" err))))
+
+;; Load gptel
+(require 'gptel nil t)
+
+(if (featurep 'gptel)
+    (message "✓ gptel is loaded and ready!")
+  (message "✗ gptel could not be loaded"))
+#+END_SRC
+
+** Check if gptel is Installed
+
+#+BEGIN_SRC emacs-lisp
+(if (featurep 'gptel)
+    (message "✓ gptel is loaded (version: %s)"
+             (if (boundp 'gptel-version) gptel-version "unknown"))
+  (if (locate-library "gptel")
+      (progn
+        (require 'gptel)
+        (message "✓ gptel loaded successfully"))
+    (message "✗ gptel not found. Execute the blocks above to install it.")))
+#+END_SRC
+
+** Verify API Keys
+
+Check for API keys in environment variables:
+
+#+BEGIN_SRC emacs-lisp
+(let ((keys '(("OpenAI" . "OPENAI_API_KEY")
+              ("Anthropic" . "ANTHROPIC_API_KEY")
+              ("Google" . "GEMINI_API_KEY")
+              ("Groq" . "GROQ_API_KEY"))))
+  (message "API Key Status:\n\n%s\n\nNote: You only need ONE API key to use gptel."
+           (mapconcat
+            (lambda (provider)
+              (format "%-12s: %s"
+                      (car provider)
+                      (if (getenv (cdr provider))
+                          "✓ Configured"
+                        "✗ Not found")))
+            keys
+            "\n")))
+#+END_SRC
+
+** Check Ollama (Optional for Local Models)
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-check-ollama ()
+  "Check if Ollama is available for local models."
+  (interactive)
+  (if (executable-find "ollama")
+      (message "✓ Ollama found at: %s\nYou can use local models!"
+               (executable-find "ollama"))
+    (message "✗ Ollama not found.\nInstall from: https://ollama.ai/\nOptional - only needed for local models.")))
+
+(demo-check-ollama)
+#+END_SRC
+
+* Basic Configuration
+
+** View Current Configuration
+
+#+BEGIN_SRC emacs-lisp
+(with-eval-after-load 'gptel
+  (message "Current gptel Configuration:
+
+Backend: %s
+Model: %s
+API Key Set: %s
+Temperature: %s
+Max Tokens: %s
+Default Mode: %s"
+           (if (boundp 'gptel-backend)
+               (if gptel-backend
+                   (oref gptel-backend name)
+                 "OpenAI (default)")
+             "Not configured")
+           (if (boundp 'gptel-model)
+               gptel-model
+             "Not set")
+           (if (boundp 'gptel-api-key)
+               (if gptel-api-key "Yes" "No (using env var)")
+             "No")
+           (if (boundp 'gptel-temperature)
+               gptel-temperature
+             "Not set")
+           (if (boundp 'gptel-max-tokens)
+               gptel-max-tokens
+             "Not set")
+           (if (boundp 'gptel-default-mode)
+               gptel-default-mode
+             "Not set")))
+#+END_SRC
+
+** Basic OpenAI Setup
+
+#+BEGIN_SRC emacs-lisp
+(require 'gptel)
+
+;; Use environment variable for API key
+;; (setenv "OPENAI_API_KEY" "sk-...")
+
+;; Or set directly (not recommended for shared configs)
+;; (setq gptel-api-key "sk-...")
+
+;; Set default model
+(setq gptel-model "gpt-4o")
+(setq gptel-temperature 0.7)
+
+(message "✓ gptel configured for OpenAI with model: %s" gptel-model)
+#+END_SRC
+
+** Configure Claude (Anthropic)
+
+#+BEGIN_SRC emacs-lisp
+(require 'gptel)
+
+(gptel-make-anthropic "Claude"
+  :stream t
+  :key (lambda () (getenv "ANTHROPIC_API_KEY")))
+
+;; Set as default backend
+(setq-default gptel-backend (gptel-make-anthropic "Claude"
+                              :stream t
+                              :key (getenv "ANTHROPIC_API_KEY")))
+
+(setq-default gptel-model "claude-3-5-sonnet-20241022")
+
+(message "✓ gptel configured for Claude")
+#+END_SRC
+
+** Configure Ollama (Local Models)
+
+#+BEGIN_SRC emacs-lisp
+(require 'gptel)
+
+(gptel-make-ollama "Ollama"
+  :host "localhost:11434"
+  :stream t
+  :models '(llama3.2:latest
+            codellama:latest
+            mistral:latest))
+
+;; Set as default
+(setq-default gptel-backend (gptel-make-ollama "Ollama"
+                              :host "localhost:11434"
+                              :stream t
+                              :models '(llama3.2:latest)))
+
+(setq-default gptel-model "llama3.2:latest")
+
+(message "✓ gptel configured for Ollama")
+#+END_SRC
+
+* Basic Usage
+
+** Simple Chat in Dedicated Buffer
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-simple-chat ()
+  "Demonstrate basic gptel chat."
+  (interactive)
+  (message "Simple Chat Usage:
+
+1. Start gptel: M-x gptel
+
+2. A new buffer opens (*gptel*) in markdown-mode
+
+3. Type your message (anything you want to ask)
+
+4. Send: C-c RET (or M-x gptel-send)
+
+5. Response streams in real-time
+
+6. Continue conversation - context is maintained
+
+7. Switch models: C-c C-x (gptel-menu)
+
+Try it now:
+  M-x gptel
+
+Example questions:
+  - What's the difference between let and let* in Elisp?
+  - Explain Emacs hooks with examples
+  - Help me understand macros"))
+
+(demo-simple-chat)
+#+END_SRC
+
+** Chat in Any Buffer
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-buffer-chat ()
+  "Demonstrate chatting in any buffer."
+  (interactive)
+  (message "Chat in Any Buffer:
+
+gptel works in ANY buffer, not just dedicated chat buffers!
+
+Example in scratch buffer:
+1. Switch to *scratch*: C-x b *scratch*
+2. Type: 'Explain closures in Emacs Lisp'
+3. Send: C-c RET (gptel-send)
+4. Response appears right in the buffer!
+
+Example in code file:
+1. Open myfile.el
+2. At end of buffer, type:
+   ;; How do I add error handling here?
+3. Send: C-c RET
+4. AI responds with code suggestions
+
+Benefits:
+✓ Work in context
+✓ No switching buffers
+✓ AI sees surrounding code
+✓ Natural workflow
+
+Region-based:
+1. Select code or text
+2. Type question below
+3. C-c RET - AI sees selection as context"))
+
+(demo-buffer-chat)
+#+END_SRC
+
+** Refactoring Code with Context
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-code-refactoring ()
+  "Demonstrate code refactoring with gptel."
+  (interactive)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; Sample function to refactor
+\(defun calculate-total (items)
+  (let ((sum 0))
+    (dolist (item items)
+      (setq sum (+ sum item)))
+    sum))")
+    (message "Code Refactoring Example:
+
+Original code in buffer:
+%s
+
+Workflow:
+1. Select the function (mark region)
+2. Type below the function:
+   'Refactor this to be more functional and idiomatic'
+3. C-c RET (gptel-send)
+
+AI Response (appears in buffer):
+(defun calculate-total (items)
+  \"Calculate the sum of all ITEMS.
+ITEMS should be a list of numbers.\"
+  (apply #'+ items))
+
+or with cl-lib:
+(defun calculate-total (items)
+  \"Calculate the sum of all ITEMS.\"
+  (cl-reduce #'+ items :initial-value 0))
+
+✓ Works in actual source files
+✓ Maintains buffer context
+✓ Streaming responses
+✓ Iterative refinement"
+             (buffer-string))))
+
+(demo-code-refactoring)
+#+END_SRC
+
+* Advanced Features
+
+** gptel Menu (C-c C-x)
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-gptel-menu ()
+  "Explain the gptel transient menu."
+  (interactive)
+  (message "gptel Menu (C-c C-x or M-x gptel-menu):
+
+🎛️  INTERACTIVE MENU for all settings
+
+Options Available:
+
+[b] Backend         - Switch between providers
+                     (OpenAI, Claude, Ollama, etc.)
+
+[m] Model           - Change model
+                     (gpt-4o, claude-3-5-sonnet, etc.)
+
+[t] Temperature     - Adjust creativity (0.0-2.0)
+                     Lower = focused, Higher = creative
+
+[k] Max tokens      - Set response length limit
+
+[s] System prompt   - Set behavior instructions
+
+[n] Directives      - Add context/instructions
+
+[i] Inspect         - View full conversation
+
+Usage:
+1. In any buffer with gptel: C-c C-x
+2. Select option with keybinding
+3. Change setting
+4. Continue chatting with new settings
+
+Example workflow:
+- Start with gpt-3.5-turbo (fast, cheap)
+- Switch to gpt-4o for complex problems (C-c C-x b)
+- Adjust temperature for creative writing (C-c C-x t)"))
+
+(demo-gptel-menu)
+#+END_SRC
+
+** System Prompts
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-system-prompts ()
+  "Demonstrate custom system prompts."
+  (interactive)
+  (message "System Prompts in gptel:
+
+System prompts set AI behavior and personality.
+
+Built-in Prompts:
+  View: M-x gptel-system-prompt
+
+Custom Prompts:
+
+1. Code Reviewer:
+   (gptel-make-system-prompt
+    \"code-reviewer\"
+    \"You are an expert code reviewer. Focus on:
+     - Potential bugs
+     - Performance issues
+     - Security vulnerabilities
+     - Best practices
+     Be constructive and specific.\")
+
+2. Elisp Mentor:
+   (gptel-make-system-prompt
+    \"elisp-mentor\"
+    \"You are an Emacs Lisp expert and patient teacher.
+     Explain concepts clearly with examples.
+     Reference official Emacs documentation.
+     Encourage best practices.\")
+
+3. Technical Writer:
+   (gptel-make-system-prompt
+    \"tech-writer\"
+    \"You are a technical documentation writer.
+     Write clear, concise documentation.
+     Include examples and use cases.
+     Target audience: developers.\")
+
+Usage:
+  C-c C-x → s (System) → Select prompt
+
+Set default:
+  (setq-default gptel-directives
+                '((default . \"You are a helpful assistant.\")
+                  (code-review . \"You are a code reviewer...\")
+                  (teaching . \"You are a patient teacher...\")))"))
+
+(demo-system-prompts)
+#+END_SRC
+
+** Context and Rewriting
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-rewrite-feature ()
+  "Demonstrate gptel's rewrite capability."
+  (interactive)
+  (message "Rewriting with gptel:
+
+gptel can rewrite/edit text in place!
+
+Example 1: Improve Writing
+  Original: 'This function does stuff with data'
+  1. Select text
+  2. M-x gptel-rewrite (or custom binding)
+  3. Prompt: 'Make this more professional'
+  Result: 'This function processes and transforms input data'
+
+Example 2: Code Documentation
+  Original: (defun foo (x) (* x 2))
+  1. Select function
+  2. gptel-rewrite
+  3. Prompt: 'Add comprehensive docstring'
+  Result:
+    (defun foo (x)
+      \"Double the value of X.
+    X should be a number. Returns X multiplied by 2.\"
+      (* x 2))
+
+Example 3: Translate
+  Original: 'Hello, how are you?'
+  1. Select text
+  2. gptel-rewrite
+  3. Prompt: 'Translate to Spanish'
+  Result: '¡Hola! ¿Cómo estás?'
+
+Workflow:
+  1. Select region
+  2. M-x gptel-rewrite (or set keybinding)
+  3. Enter instruction
+  4. Text replaced in-place
+
+Perfect for:
+  - Improving prose
+  - Adding documentation
+  - Refactoring code
+  - Translations
+  - Format conversions"))
+
+(demo-rewrite-feature)
+#+END_SRC
+
+** Org-mode Integration
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-org-integration ()
+  "Demonstrate gptel with org-mode."
+  (interactive)
+  (message "gptel + Org-mode Integration:
+
+gptel works seamlessly in org-mode!
+
+Use Case 1: Research Notes
+  * Understanding Closures
+  What are closures and how do they work in Emacs Lisp?
+
+  [Position cursor after question]
+  C-c RET → AI response appears below
+
+Use Case 2: Code Examples
+  * Code Examples
+  #+BEGIN_SRC emacs-lisp
+  ;; Show me an example of using advice
+  #+END_SRC
+
+  [In src block, ask for code]
+  C-c RET → Code example appears
+
+Use Case 3: Documentation
+  * API Documentation
+  #+BEGIN_SRC emacs-lisp
+  (defun my-api-call (endpoint data)
+    ...)
+  #+END_SRC
+
+  Document this API function with examples.
+  C-c RET → Documentation appears
+
+Use Case 4: Learning Journal
+  * Daily Learning Log
+  ** 2025-01-03
+  Today I learned about...
+
+  [Ask follow-up questions]
+  C-c RET → AI elaborates
+
+Use Case 5: Meeting Notes
+  * Meeting with Team
+  ** Topics Discussed
+  - Feature X implementation
+  - Performance issues
+
+  Summarize action items from above.
+  C-c RET → Organized action items
+
+Benefits:
+✓ Natural workflow
+✓ Structured notes
+✓ Easy to export
+✓ Git-friendly
+✓ Code execution with babel"))
+
+(demo-org-integration)
+#+END_SRC
+
+* Practical Workflows
+
+** Workflow 1: Interactive Coding Assistant
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-coding-assistant-workflow ()
+  "Complete coding assistant workflow."
+  (interactive)
+  (message "Coding Assistant Workflow:
+
+Scenario: Building a new function
+
+Step 1: Planning (in comments)
+  ;; I need a function that:
+  ;; - Reads a JSON file
+  ;; - Validates the schema
+  ;; - Returns parsed data or error
+  ;; How should I structure this?
+
+  [Position after comments, C-c RET]
+
+Step 2: Implementation
+  ;; Great approach! Now implement it:
+
+  [C-c RET with the suggested approach]
+  [AI generates implementation]
+
+Step 3: Review
+  [Select generated code]
+  ;; Review this for:
+  ;; - Error handling
+  ;; - Edge cases
+  ;; - Performance
+
+  [C-c RET]
+
+Step 4: Testing
+  ;; Generate ert tests for this function
+
+  [C-c RET]
+  [Test code appears]
+
+Step 5: Documentation
+  [Select final function]
+  ;; Add comprehensive docstring and usage examples
+
+  [C-c RET]
+
+Result: Fully implemented, tested, documented function!
+
+Key Features:
+✓ Iterative development
+✓ Context-aware (sees your code)
+✓ In-buffer workflow
+✓ Real-time assistance"))
+
+(demo-coding-assistant-workflow)
+#+END_SRC
+
+** Workflow 2: Debugging Assistant
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-debugging-workflow ()
+  "Debugging workflow with gptel."
+  (interactive)
+  (let ((buggy-code "(defun process-items (items)
+  (mapcar 'upcase items))
+
+;; Error: wrong-type-argument stringp 42"))
+    (message "Debugging Workflow:
+
+Buggy Code:
+%s
+
+Step 1: Describe Problem
+  [Select code and error]
+  This function crashes with the error above when items
+  contains numbers. Why and how do I fix it?
+
+  [C-c RET]
+
+AI Response:
+  The issue is mapcar 'upcase expects strings, but items
+  contains numbers. Solutions:
+  1. Filter for strings only
+  2. Convert numbers to strings first
+  3. Add type checking
+
+Step 2: Choose Solution
+  Show me option 2 - convert to strings first
+
+  [C-c RET]
+
+Step 3: Test Edge Cases
+  ;; What if items is nil or contains nil values?
+
+  [C-c RET]
+  [AI suggests improvements]
+
+Step 4: Final Version
+  [Select improved code]
+  Add error handling and docstring
+
+  [C-c RET]
+
+Benefits:
+✓ Explains root cause
+✓ Multiple solutions
+✓ Considers edge cases
+✓ Learns from your code style"
+             buggy-code)))
+
+(demo-debugging-workflow)
+#+END_SRC
+
+** Workflow 3: Learning New APIs
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-learning-api-workflow ()
+  "Learning new APIs with gptel."
+  (interactive)
+  (message "Learning APIs Workflow:
+
+Scenario: Learning to use plz.el (HTTP library)
+
+Step 1: Overview
+  ;; I need to make HTTP requests in Emacs.
+  ;; Explain plz.el and show a simple GET example.
+
+  [C-c RET]
+
+Step 2: Specific Use Case
+  ;; Now show me how to make a POST request with JSON data
+
+  [C-c RET]
+  [Example appears]
+
+Step 3: Error Handling
+  ;; How do I handle errors and timeouts with plz?
+
+  [C-c RET]
+
+Step 4: Practice
+  ;; Give me an exercise: fetch data from JSONPlaceholder API
+  ;; and display the titles
+
+  [C-c RET]
+  [Try it yourself]
+
+Step 5: Review
+  [Paste your attempt]
+  ;; Review my solution
+
+  [C-c RET]
+  [Get feedback]
+
+Step 6: Advanced
+  ;; Show me async requests and parallel fetching
+
+  [C-c RET]
+
+Progressive Learning:
+✓ Start simple
+✓ Build complexity gradually
+✓ Immediate examples
+✓ Practice with feedback
+✓ Context preserved throughout"))
+
+(demo-learning-api-workflow)
+#+END_SRC
+
+** Workflow 4: Documentation Writing
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-documentation-workflow ()
+  "Documentation workflow with gptel."
+  (interactive)
+  (message "Documentation Workflow:
+
+Scenario: Document a package
+
+Step 1: README Structure
+  ;; Create a README structure for my-cache.el package
+  ;; It provides in-memory caching with TTL and LRU eviction
+
+  [C-c RET]
+  [Structure appears]
+
+Step 2: Installation Section
+  ;; Write detailed installation instructions for MELPA
+
+  [C-c RET]
+
+Step 3: Usage Examples
+  [Select main functions]
+  ;; Generate usage examples for these functions
+
+  [C-c RET]
+
+Step 4: API Documentation
+  ;; Create a table of all public functions with descriptions
+
+  [C-c RET]
+
+Step 5: Advanced Usage
+  ;; Document advanced features: custom eviction policies,
+  ;; cache statistics, persistence
+
+  [C-c RET]
+
+Step 6: Troubleshooting
+  ;; Create a troubleshooting section for common issues
+
+  [C-c RET]
+
+Result: Complete, professional documentation!
+
+Also useful for:
+- Changelog generation
+- Release notes
+- Blog posts about your package
+- Tutorial writing"))
+
+(demo-documentation-workflow)
+#+END_SRC
+
+* Backend Comparison
+
+** OpenAI (ChatGPT)
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-openai-backend ()
+  "OpenAI backend information."
+  (interactive)
+  (message "OpenAI Backend:
+
+Models:
+  gpt-4o              - Best overall (multimodal)
+  gpt-4-turbo         - Fast, capable
+  gpt-3.5-turbo       - Fast, economical
+  gpt-4o-mini         - Smallest, cheapest
+
+Configuration:
+  (setq gptel-api-key \"sk-...\")
+  (setq gptel-model \"gpt-4o\")
+
+Pros:
+  ✓ Excellent code understanding
+  ✓ Fast responses
+  ✓ Large context window
+  ✓ Very reliable
+  ✓ Best for general use
+
+Cons:
+  ✗ Requires API key
+  ✗ Costs money (per token)
+  ✗ Sends data to cloud
+  ✗ Requires internet
+
+Best for:
+  - Production use
+  - Best quality needed
+  - Quick responses
+  - General coding tasks
+
+Cost (approximate):
+  gpt-3.5-turbo: $0.0005/1K tokens
+  gpt-4o: $0.005/1K tokens
+  ~1K tokens = ~750 words"))
+
+(demo-openai-backend)
+#+END_SRC
+
+** Anthropic (Claude)
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-claude-backend ()
+  "Claude backend information."
+  (interactive)
+  (message "Anthropic Claude Backend:
+
+Models:
+  claude-3-5-sonnet-20241022  - Best overall
+  claude-3-5-haiku-20241022   - Fast, economical
+  claude-3-opus-20240229      - Most capable (older)
+
+Configuration:
+  (gptel-make-anthropic \"Claude\"
+    :stream t
+    :key \"sk-ant-...\")
+
+  (setq-default gptel-model \"claude-3-5-sonnet-20241022\")
+
+Pros:
+  ✓ Excellent reasoning
+  ✓ Very large context (200K tokens)
+  ✓ Great for code
+  ✓ Thoughtful responses
+  ✓ Strong at analysis
+
+Cons:
+  ✗ Requires API key
+  ✗ Costs money
+  ✗ Cloud-based
+  ✗ Can be verbose
+
+Best for:
+  - Complex reasoning
+  - Long documents
+  - Code review
+  - Analysis tasks
+  - When context matters
+
+Cost (approximate):
+  haiku: $0.25/1M tokens
+  sonnet: $3/1M tokens
+  Very affordable for quality!"))
+
+(demo-claude-backend)
+#+END_SRC
+
+** Ollama (Local)
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-ollama-backend ()
+  "Ollama backend information."
+  (interactive)
+  (message "Ollama Backend (Local Models):
+
+Popular Models:
+  llama3.2:latest     - Best balance
+  codellama:latest    - Code-focused
+  mistral:latest      - Fast
+  deepseek-coder      - Excellent coding
+  phi                 - Tiny, fast
+
+Configuration:
+  (gptel-make-ollama \"Ollama\"
+    :host \"localhost:11434\"
+    :stream t
+    :models '(llama3.2:latest))
+
+Pros:
+  ✓ FREE (no API costs)
+  ✓ Private (runs locally)
+  ✓ Works offline
+  ✓ No data sent externally
+  ✓ Many model choices
+
+Cons:
+  ✗ Requires local resources (RAM, CPU/GPU)
+  ✗ Slower than cloud APIs
+  ✗ Setup required
+  ✗ Quality varies by model
+  ✗ Smaller context windows
+
+Best for:
+  - Privacy concerns
+  - Offline work
+  - Experimentation
+  - Cost-sensitive use
+  - Learning
+
+Resource Requirements:
+  7B model: ~8GB RAM
+  13B model: ~16GB RAM
+  70B model: ~40GB RAM + GPU"))
+
+(demo-ollama-backend)
+#+END_SRC
+
+** Switching Backends
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-backend-switching ()
+  "Demonstrate switching backends."
+  (interactive)
+  (message "Switching Backends in gptel:
+
+Method 1: gptel Menu
+  C-c C-x → b (Backend) → Select
+
+Method 2: Set Default
+  (setq-default gptel-backend
+                (gptel-make-anthropic \"Claude\" ...))
+
+Method 3: Per-Buffer
+  M-x gptel-menu → Backend
+
+Method 4: Programmatically
+  (setq-local gptel-backend my-ollama-backend)
+
+Example Workflow:
+  - Default: GPT-3.5 (fast, cheap queries)
+  - Complex: Switch to GPT-4o or Claude Sonnet
+  - Private: Switch to Ollama
+  - Experiments: Ollama with different models
+
+Multi-Backend Setup:
+  ;; Define all backends
+  (setq my-openai
+        (gptel-make-openai \"OpenAI\" :key \"...\"))
+
+  (setq my-claude
+        (gptel-make-anthropic \"Claude\" :key \"...\"))
+
+  (setq my-ollama
+        (gptel-make-ollama \"Ollama\" :host \"localhost:11434\"))
+
+  ;; Switch easily
+  (setq-default gptel-backend my-ollama)  ; Default
+  C-c C-x b → switch interactively"))
+
+(demo-backend-switching)
+#+END_SRC
+
+* Tips and Best Practices
+
+** Effective Prompting
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-prompting-tips ()
+  "Tips for effective prompting with gptel."
+  (interactive)
+  (message "Effective Prompting Tips:
+
+✓ BE SPECIFIC
+  Bad:  'Fix this'
+  Good: 'Add nil checking and return default value'
+
+✓ PROVIDE CONTEXT
+  Bad:  'How do I optimize this?'
+  Good: [Select code] 'Optimize for large lists (>10000 items)'
+
+✓ USE EXAMPLES
+  'Write a function like mapcar but with index'
+
+✓ ITERATE
+  Start simple, refine:
+  1. 'Write a cache function'
+  2. 'Add TTL support'
+  3. 'Add size limits'
+
+✓ LEVERAGE SELECTION
+  Select code before asking - AI sees it as context
+
+✓ USE COMMENTS
+  ;; How would I add error handling here?
+  [Code is visible above]
+
+✓ ASK FOR EXPLANATIONS
+  'Explain why this approach is better'
+
+✓ REQUEST ALTERNATIVES
+  'Show me 3 different ways to implement this'
+
+✗ AVOID VAGUE REQUESTS
+  'Make it better' - Better how?
+  'Add features' - Which features?
+
+Context Matters:
+  gptel sees buffer content
+  → Write questions near relevant code
+  → Select code to focus AI attention"))
+
+(demo-prompting-tips)
+#+END_SRC
+
+** Common AI Mistakes
+
+AI models sometimes confuse different Lisp dialects or make other common errors. Here's how to spot and fix them:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-common-ai-mistakes ()
+  "Common mistakes AI makes with Emacs Lisp."
+  (interactive)
+  (message "Common AI Mistakes to Watch For:
+
+🚨 MISTAKE #1: Common Lisp vs Emacs Lisp Confusion
+
+Problem: AI generates Common Lisp instead of Emacs Lisp
+This is the MOST COMMON mistake!
+
+❌ WRONG (Common Lisp):
+(defun fizzbuzz (n)
+  (dotimes (i n)
+    (format t \"%%d\\n\" i)))     ; 't' is Common Lisp!
+
+✓ CORRECT (Emacs Lisp):
+(defun fizzbuzz (n)
+  (dotimes (i n)
+    (message \"%%d\" i)))          ; Use 'message' not 'format t'
+
+Common Lisp Indicators:
+  - format t \"...\"           → Use: (message \"...\")
+  - (loop for ...)            → Use: (cl-loop ...) or (dolist ...)
+  - defparameter              → Use: defvar or defcustom
+  - #'(lambda ...)            → Use: (lambda ...)
+  - (incf x)                  → Use: (cl-incf x) or (setq x (1+ x))
+  - (decf x)                  → Use: (cl-decf x) or (setq x (1- x))
+  - t as output stream        → Use: message, insert, or princ
+
+🚨 MISTAKE #2: Missing Package Prefixes
+
+Problem: Using cl functions without cl- prefix
+
+❌ WRONG:
+(remove-if #'oddp numbers)
+
+✓ CORRECT:
+(cl-remove-if #'oddp numbers)
+;; Or use built-in:
+(seq-filter #'evenp numbers)
+
+🚨 MISTAKE #3: Wrong String Formatting
+
+Problem: Using printf-style without proper Emacs format
+
+❌ WRONG:
+(format t \"%%s: %%d\" name count)
+
+✓ CORRECT:
+(message \"%%s: %%d\" name count)
+;; Or return string:
+(format \"%%s: %%d\" name count)
+
+🚨 MISTAKE #4: Buffer vs String Confusion
+
+Problem: Mixing buffer operations with string operations
+
+❌ WRONG:
+(with-output-to-string
+  (insert \"text\"))
+
+✓ CORRECT:
+(with-temp-buffer
+  (insert \"text\")
+  (buffer-string))
+
+🚨 MISTAKE #5: Using Obsolete Functions
+
+Problem: AI trained on old Emacs documentation
+
+Examples:
+  flet             → cl-flet
+  labels           → cl-labels
+  case             → cl-case
+  defun*           → cl-defun"))
+
+(demo-common-ai-mistakes)
+#+END_SRC
+
+** Real Example: FizzBuzz Gone Wrong
+
+Here's an actual example of AI generating Common Lisp when asked for Emacs Lisp:
+
+#+BEGIN_SRC emacs-lisp
+;; What AI might generate (BROKEN):
+(defun fizzbuzz-wrong (n)
+  "AI-generated Common Lisp - won't work in Emacs!"
+  (dotimes (i n)
+    (if (zerop i)
+        (format t "%d\n" i)      ; ← 'format t' is Common Lisp!
+      (progn
+        (if (zerop (mod i 3))
+            (format t "Fizz"))   ; ← Wrong!
+        (if (zerop (mod i 5))
+            (format t "Buzz"))   ; ← Wrong!
+        (format t "%d\n" i)))))  ; ← Wrong!
+
+;; Error when running:
+;; wrong-type-argument stringp t
+
+;; Corrected Emacs Lisp version:
+(defun fizzbuzz-correct (n)
+  "Print FizzBuzz sequence up to N."
+  (dotimes (i n)
+    (let ((num (1+ i)))          ; dotimes starts at 0
+      (cond
+       ((zerop (mod num 15)) (message "FizzBuzz"))
+       ((zerop (mod num 3))  (message "Fizz"))
+       ((zerop (mod num 5))  (message "Buzz"))
+       (t (message "%d" num))))))
+
+;; Test it:
+;; (fizzbuzz-correct 15)
+
+(message "✓ Run (fizzbuzz-correct 15) to see it work!")
+#+END_SRC
+
+** Another Common Mistake: dotimes vs dolist
+
+AI often confuses `dotimes` (for numbers) with `dolist` (for lists):
+
+#+BEGIN_SRC emacs-lisp
+;; MISTAKE: Using dotimes with a list (WRONG!)
+(defun greet-wrong ()
+  (let ((names '("Alice" "Bob")))
+    (dotimes (name names)           ; ← WRONG! dotimes expects a NUMBER
+      (message "Hello, %s!" name))))
+
+;; Error: wrong-type-argument number-or-marker-p ("Alice" "Bob")
+
+;; CORRECT: Use dolist for lists
+(defun greet-correct ()
+  (let ((names '("Alice" "Bob")))
+    (dolist (name names)            ; ← CORRECT! dolist for lists
+      (message "Hello, %s!" name))))
+
+;; Test it:
+(greet-correct)
+;; Outputs: Hello, Alice!
+;;          Hello, Bob!
+
+(message "✓ dotimes = numbers, dolist = lists!")
+#+END_SRC
+
+** When to Use dotimes vs dolist
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-times-vs-list ()
+  "Explain dotimes vs dolist clearly."
+  (interactive)
+  (message "dotimes vs dolist:
+
+USE dotimes - Loop N times with a counter
+  Syntax: (dotimes (VAR COUNT) BODY...)
+  VAR goes from 0 to COUNT-1
+
+  Example - Print 0 to 4:
+  (dotimes (i 5)
+    (message \"Count: %%d\" i))
+
+  Use cases:
+  - Repeating something N times
+  - Iterating with index/counter
+  - Building sequences of numbers
+
+USE dolist - Iterate over list elements
+  Syntax: (dolist (VAR LIST) BODY...)
+  VAR takes each element value
+
+  Example - Print each name:
+  (dolist (name '(\"Alice\" \"Bob\" \"Charlie\"))
+    (message \"Name: %%s\" name))
+
+  Use cases:
+  - Processing list items
+  - Iterating over collections
+  - Working with actual values (not indices)
+
+REMEMBER:
+  dotimes → NUMBERS (counter: 0, 1, 2, 3...)
+  dolist  → VALUES  (elements: \"a\", \"b\", \"c\"...)
+
+Common AI Error:
+  (dotimes (item my-list) ...)  ← WRONG type!
+  Should be: (dolist (item my-list) ...)"))
+
+(demo-times-vs-list)
+#+END_SRC
+
+** AI Also Adds Unnecessary Code
+
+Watch out for AI adding features you didn't request:
+
+#+BEGIN_SRC emacs-lisp
+;; You asked for a simple function, AI adds:
+(defgroup my-package nil           ; ← You didn't ask for this!
+  "My package settings."
+  :group 'applications)
+
+(defcustom my-variable t           ; ← You didn't ask for this!
+  "Some custom variable."
+  :type 'boolean
+  :group 'my-package)
+
+(defun my-function ()              ; ← This is what you wanted
+  "The actual function."
+  (message "Hello"))
+
+;; Problems:
+;; 1. Unnecessary complexity
+;; 2. defgroup syntax often wrong
+;; 3. Harder to test and debug
+
+(message "Tip: Ask for 'ONLY the function definition'")
+#+END_SRC
+
+** Better Prompts: Be Restrictive
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-restrictive-prompts ()
+  "Show how to get ONLY what you want."
+  (interactive)
+  (message "Restrictive Prompt Strategy:
+
+BAD PROMPT (Too Open):
+  'Write a function to greet names'
+
+  Result: AI adds defgroup, defcustom, comments,
+  examples, tests, package headers, etc.
+
+GOOD PROMPT (Restrictive):
+  'Write ONLY an Emacs Lisp function called greet-names.
+   Do NOT add: defgroup, defcustom, provide, require,
+   commentary, or package headers.
+   Just the function and one usage example. That's it.'
+
+  Result: Just the function you need!
+
+Key Phrases:
+  - 'Write ONLY...'
+  - 'Do NOT add...'
+  - 'Just the function definition...'
+  - 'That's it. Nothing else.'
+
+Template:
+  'Write ONLY an Emacs Lisp function called NAME.
+   Do NOT add defgroup, defcustom, provide, or commentary.
+   Requirements: [your specific needs]
+   This is EMACS LISP (not Common Lisp).
+   Expected format:
+   (defun NAME (args) \"doc\" ...body...)
+   (NAME test-args)
+   That's it.'"))
+
+(demo-restrictive-prompts)
+#+END_SRC
+
+** How to Get Better Results from AI
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-better-prompts ()
+  "Tips for getting correct Emacs Lisp from AI."
+  (interactive)
+  (message "Getting Better Emacs Lisp from AI:
+
+✓ BE EXPLICIT ABOUT EMACS LISP
+  Bad:  'Write a Lisp function...'
+  Good: 'Write an EMACS LISP function (not Common Lisp)...'
+
+✓ SPECIFY MODERN EMACS
+  Good: 'Write Emacs Lisp for Emacs 29+'
+        'Use modern Emacs idioms'
+        'Use seq.el functions where appropriate'
+
+✓ REQUEST SPECIFIC LIBRARIES
+  'Use cl-lib for Common Lisp compatibility'
+  'Use seq.el for sequence operations'
+  'Avoid obsolete cl.el functions'
+
+✓ ASK FOR EXPLANATION
+  'Explain each function used'
+  This helps you catch dialect confusion
+
+✓ ALWAYS TEST THE CODE
+  Never trust AI-generated code without testing!
+  Run it in a scratch buffer first
+
+✓ CHECK FOR RED FLAGS
+  Search generated code for:
+    - 'format t'
+    - 'loop for'
+    - 'defparameter'
+    - Plain 'incf', 'decf', 'remove-if'
+
+✓ ITERATIVE CORRECTION
+  If AI makes a mistake:
+  'This is Common Lisp. Rewrite for Emacs Lisp specifically.'
+  'Replace format t with message'
+  'Use cl-lib prefix for Common Lisp functions'"))
+
+(demo-better-prompts)
+#+END_SRC
+
+** Quick Reference: Common Lisp → Emacs Lisp
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-lisp-dialect-comparison ()
+  "Quick reference for Common Lisp vs Emacs Lisp."
+  (interactive)
+  (message "Common Lisp → Emacs Lisp Translation:
+
+OUTPUT:
+  (format t \"...\")           → (message \"...\")
+  (format t \"%%s\" x)         → (message \"%%s\" x)
+  (print x)                   → (prin1 x)
+  (princ x)                   → (princ x)  ; Same!
+
+LOOPS:
+  (loop for x in list ...)    → (cl-loop for x in list ...)
+  (loop for i from 0 to n)    → (cl-loop for i from 0 to n)
+                              or (dotimes (i n) ...)
+
+CONDITIONALS:
+  (case x ...)                → (cl-case x ...)
+  (typecase x ...)            → (cl-typecase x ...)
+
+VARIABLES:
+  (defparameter *var* val)    → (defvar var val)
+  (defvar *var* val)          → (defvar var val)
+
+FUNCTIONS:
+  (defun* name ...)           → (cl-defun name ...)
+  (flet ...)                  → (cl-flet ...)
+  (labels ...)                → (cl-labels ...)
+
+SEQUENCES:
+  (remove-if pred list)       → (cl-remove-if pred list)
+                              or (seq-filter (not pred) list)
+  (remove-if-not pred list)   → (cl-remove-if-not pred list)
+                              or (seq-filter pred list)
+  (find-if pred list)         → (cl-find-if pred list)
+                              or (seq-find pred list)
+  (count-if pred list)        → (cl-count-if pred list)
+                              or (seq-count pred list)
+
+MATH:
+  (incf x)                    → (cl-incf x) or (setq x (1+ x))
+  (decf x)                    → (cl-decf x) or (setq x (1- x))
+  (incf x 5)                  → (cl-incf x 5)
+
+DESTRUCTURING:
+  (destructuring-bind ...)    → (cl-destructuring-bind ...)
+
+Use M-x apropos to find Emacs equivalents!"))
+
+(demo-lisp-dialect-comparison)
+#+END_SRC
+
+** Performance Optimization
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-performance-tips ()
+  "Performance tips for gptel."
+  (interactive)
+  (message "Performance Tips:
+
+1. Model Selection:
+   Fast: gpt-3.5-turbo, claude-haiku
+   Quality: gpt-4o, claude-sonnet
+   Local: mistral, phi (Ollama)
+
+2. Streaming:
+   gptel streams by default (fast perceived response)
+   Watch response appear in real-time
+   Cancel with C-g if needed
+
+3. Context Management:
+   Shorter prompts = faster response
+   Use gptel-rewrite for focused edits
+   Start new buffer for new topics
+
+4. Temperature Settings:
+   Lower (0.3) = faster, deterministic
+   Higher (0.8) = creative, slower
+   Adjust: C-c C-x → t
+
+5. Token Limits:
+   Set max-tokens to limit response length
+   C-c C-x → k
+   Saves time and cost
+
+6. Backend Choice:
+   Cloud APIs: Fast, expensive
+   Local (Ollama): Free, slower
+   Choose based on task urgency
+
+7. Batch Similar Tasks:
+   Keep conversation in one buffer
+   Maintains context efficiently
+
+Benchmarking:
+  (benchmark-run 1
+    (gptel-send))
+
+  Compare backends/models"))
+
+(demo-performance-tips)
+#+END_SRC
+
+** Common Pitfalls
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-common-pitfalls ()
+  "Common pitfalls and solutions."
+  (interactive)
+  (message "Common Pitfalls:
+
+❌ No API Key
+   ✓ Check: (getenv \"OPENAI_API_KEY\")
+   ✓ Fix: (setenv \"OPENAI_API_KEY\" \"sk-...\")
+
+❌ Wrong Model Name
+   ✓ Check: gptel-model
+   ✓ Fix: Use exact model names (gpt-4o, not gpt4)
+
+❌ Backend Not Configured
+   ✓ Check: gptel-backend
+   ✓ Fix: Call gptel-make-* functions
+
+❌ Streaming Doesn't Work
+   ✓ Check: :stream t in backend config
+   ✓ Verify: Backend supports streaming
+
+❌ Context Not Included
+   ✓ Select code before asking
+   ✓ Or ask in same buffer as code
+
+❌ Response Too Long/Short
+   ✓ Adjust: C-c C-x → k (max-tokens)
+   ✓ Or be more/less specific in prompt
+
+❌ Wrong Language Response
+   ✓ Add to prompt: \"Respond in English\"
+   ✓ System prompt can set language
+
+❌ Rate Limiting (API)
+   ✓ Wait and retry
+   ✓ Consider switching model/backend
+   ✓ Check API usage dashboard
+
+❌ Ollama Connection Failed
+   ✓ Start: ollama serve
+   ✓ Check: curl http://localhost:11434
+
+❌ Slow Responses
+   ✓ Try smaller model
+   ✓ Reduce max-tokens
+   ✓ Shorter prompts"))
+
+(demo-common-pitfalls)
+#+END_SRC
+
+** Security and Privacy
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-security-tips ()
+  "Security and privacy considerations."
+  (interactive)
+  (message "Security and Privacy:
+
+🔒 API KEY SECURITY
+
+✓ DO:
+  - Use environment variables
+  - Use auth-source (encrypted)
+  - Keep keys out of version control
+  - Rotate keys periodically
+
+✗ DON'T:
+  - Hardcode in config files
+  - Share keys
+  - Commit to git
+  - Use same key everywhere
+
+🔒 DATA PRIVACY
+
+Cloud APIs (OpenAI, Claude):
+  - Data sent to external servers
+  - Subject to provider's privacy policy
+  - Not suitable for confidential code
+  - Consider data retention policies
+
+Local Models (Ollama):
+  - Data stays on your machine
+  - No external transmission
+  - Suitable for confidential work
+  - Complete privacy
+
+🔒 BEST PRACTICES
+
+1. Sensitive Code:
+   Use Ollama for proprietary code
+
+2. Public Code:
+   Cloud APIs are fine
+
+3. API Keys:
+   (setenv \"OPENAI_API_KEY\"
+           (auth-source-pass-get \"openai\"))
+
+4. Review Responses:
+   Don't blindly trust AI code
+   Always review and test
+
+5. Rate Limits:
+   Set up monitoring
+   Avoid abuse
+
+6. Audit:
+   Check what you're sending
+   M-x gptel-menu → i (inspect)"))
+
+(demo-security-tips)
+#+END_SRC
+
+* Conclusion
+
+** Summary
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-summary ()
+  "Summarize gptel capabilities."
+  (interactive)
+  (message "gptel Summary:
+
+✅ What You Learned:
+   - Installation and configuration
+   - Multiple backend support
+   - Chat in any buffer
+   - Interactive menu (C-c C-x)
+   - Code assistance workflows
+   - Documentation generation
+   - Backend comparison
+
+🎯 Key Features:
+   - Simple, minimal setup
+   - Works in any buffer
+   - Multiple LLM providers
+   - Streaming responses
+   - Context-aware
+   - Org-mode integration
+
+🚀 Unique Advantages:
+   - No dedicated chat buffer required
+   - Context from buffer content
+   - Seamless workflow integration
+   - Easy backend switching
+   - Lightweight and fast
+
+📊 When to Use gptel:
+   ✓ Quick questions while coding
+   ✓ In-buffer code assistance
+   ✓ Multiple backend support needed
+   ✓ Minimal interface preferred
+   ✓ Want flexibility
+
+🔄 Compared to Alternatives:
+   vs Ellama: Simpler, multi-backend
+   vs org-ai: Works anywhere, not just org
+   vs aider: In-Emacs, not git-focused
+
+🎓 Next Steps:
+   1. Install: M-x package-install RET gptel
+   2. Set API key: (setenv \"OPENAI_API_KEY\" ...)
+   3. Try: M-x gptel
+   4. Learn menu: C-c C-x
+   5. Experiment with backends
+   6. Try in-buffer assistance
+   7. Integrate into workflow"))
+
+(demo-summary)
+#+END_SRC
+
+** Resources
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-resources ()
+  "Helpful resources for gptel."
+  (interactive)
+  (message "gptel Resources:
+
+📚 Official:
+   - GitHub: https://github.com/karthink/gptel
+   - Wiki: https://github.com/karthink/gptel/wiki
+   - Issues: https://github.com/karthink/gptel/issues
+
+🤖 LLM Providers:
+   - OpenAI: https://platform.openai.com/
+   - Anthropic: https://console.anthropic.com/
+   - Google AI: https://ai.google.dev/
+   - Ollama: https://ollama.ai/
+
+📖 Documentation:
+   - gptel manual: M-x info-display-manual RET gptel
+   - In-Emacs help: C-h f gptel- TAB
+   - Describe key: C-h k (then press keybinding)
+
+💬 Community:
+   - r/emacs: https://reddit.com/r/emacs
+   - Emacs Discord: https://discord.gg/emacs
+   - Stack Exchange: emacs.stackexchange.com
+
+🎓 Learning:
+   - This demo.org file!
+   - Execute examples: C-c C-c
+   - Try in *scratch* buffer
+   - Experiment with different models
+
+🔧 Tools:
+   - MELPA: https://melpa.org/
+   - use-package docs
+   - Emacs Wiki: emacswiki.org
+
+Happy AI-assisted coding! 🎉"))
+
+(demo-resources)
+#+END_SRC
+
+* Local Variables                                                  :ARCHIVE:
+# Local Variables:
+# eval: (org-babel-do-load-languages 'org-babel-load-languages '((emacs-lisp . t)))
+# End:

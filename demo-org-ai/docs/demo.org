@@ -1,0 +1,1715 @@
+#+TITLE: org-ai Interactive Demo
+#+AUTHOR: Emacs AI Study Group
+#+DATE: [2025-01-03]
+#+PROPERTY: header-args:emacs-lisp :results output :exports both
+#+STARTUP: showeverything
+
+* Introduction
+
+This document provides a hands-on, reproducible demonstration of org-ai, which
+integrates AI capabilities directly into org-mode documents.
+
+*Prerequisites:*
+- OpenAI API key (for ChatGPT, DALL-E, Whisper)
+- org-ai package installed from MELPA
+- org-mode (built into Emacs)
+
+*What is org-ai?*
+org-ai brings AI directly into org-mode documents using special #+begin_ai blocks:
+- Interactive chat with LLMs
+- Code generation and refactoring
+- Image generation (DALL-E)
+- Text-to-speech and speech-to-text (Whisper)
+- Context-aware assistance
+- All results stay in your org document
+
+*Unique Features:*
+- Native org-mode integration
+- Results embedded in document
+- Export-friendly (PDF, HTML, etc.)
+- Version control friendly
+- Reproducible research format
+
+*How to use this document:*
+1. Position cursor in any code block
+2. Press =C-c C-c= to execute the code
+3. Results will appear below the code block
+
+* Installation and Setup
+
+** Bootstrap Package System (Required for emacs -Q)
+
+If you're running this with =emacs -Q=, execute this block first to set up the package system:
+
+#+BEGIN_SRC emacs-lisp
+;; Initialize package.el
+(require 'package)
+
+;; Add MELPA if not already present
+(unless (assoc "melpa" package-archives)
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t))
+
+;; Initialize packages
+(unless package--initialized
+  (package-initialize))
+
+;; Refresh package contents if needed
+(unless package-archive-contents
+  (message "Refreshing package archive contents...")
+  (package-refresh-contents))
+
+(message "✓ Package system initialized with MELPA")
+#+END_SRC
+
+** Install org-ai (If Not Already Installed)
+
+#+BEGIN_SRC emacs-lisp
+(unless (package-installed-p 'org-ai)
+  (message "Installing org-ai from MELPA...")
+  (condition-case err
+      (progn
+        (package-install 'org-ai)
+        (message "✓ org-ai installed successfully"))
+    (error
+     (message "✗ Failed to install org-ai: %s" err))))
+
+;; Load org-ai
+(require 'org-ai nil t)
+
+(if (featurep 'org-ai)
+    (message "✓ org-ai is loaded and ready!")
+  (message "✗ org-ai could not be loaded"))
+#+END_SRC
+
+** Check if org-ai is Installed
+
+#+BEGIN_SRC emacs-lisp
+(if (featurep 'org-ai)
+    (message "✓ org-ai is loaded")
+  (if (locate-library "org-ai")
+      (progn
+        (require 'org-ai)
+        (message "✓ org-ai loaded successfully"))
+    (message "✗ org-ai not found. Execute the blocks above to install it.")))
+#+END_SRC
+
+** Verify API Key Configuration
+
+#+BEGIN_SRC emacs-lisp
+(let ((api-key (or (and (boundp 'org-ai-openai-api-token)
+                        org-ai-openai-api-token)
+                   (getenv "OPENAI_API_KEY"))))
+  (if api-key
+      (message "✓ OpenAI API key is configured\nKey starts with: %s..."
+               (substring api-key 0 (min 10 (length api-key))))
+    (message "✗ No API key found.\nSet with: (setq org-ai-openai-api-token \"sk-...\")\nOr: export OPENAI_API_KEY=\"sk-...\"")))
+#+END_SRC
+
+** Enable org-ai-mode
+
+#+BEGIN_SRC emacs-lisp
+(with-eval-after-load 'org
+  (require 'org-ai)
+  (add-hook 'org-mode-hook #'org-ai-mode)
+  (message "✓ org-ai-mode will be enabled in all org buffers"))
+#+END_SRC
+
+** View Current Configuration
+
+#+BEGIN_SRC emacs-lisp
+(with-eval-after-load 'org-ai
+  (message "Current org-ai Configuration:
+
+API Token Set: %s
+Default Model: %s
+Auto-fill: %s
+Image Directory: %s
+Use Font Lock: %s
+Default System Prompt: %s
+
+Keybinding Prefix: C-c M-a"
+           (if (or (and (boundp 'org-ai-openai-api-token)
+                        org-ai-openai-api-token)
+                   (getenv "OPENAI_API_KEY"))
+               "Yes"
+             "No")
+           (if (boundp 'org-ai-default-chat-model)
+               org-ai-default-chat-model
+             "Not set")
+           (if (boundp 'org-ai-auto-fill)
+               org-ai-auto-fill
+             "Not set")
+           (if (boundp 'org-ai-image-directory)
+               org-ai-image-directory
+             "Not set")
+           (if (boundp 'org-ai-use-font-lock)
+               org-ai-use-font-lock
+             "Not set")
+           (if (boundp 'org-ai-default-chat-system-prompt)
+               (substring org-ai-default-chat-system-prompt 0
+                          (min 50 (length org-ai-default-chat-system-prompt)))
+             "Not set")))
+#+END_SRC
+
+* Basic Usage with #+begin_ai Blocks
+
+** Understanding #+begin_ai Blocks
+
+The core feature of org-ai is the ~#+begin_ai~ block:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-ai-block-syntax ()
+  "Explain #+begin_ai block syntax."
+  (interactive)
+  (message "#+begin_ai Block Syntax:
+
+Basic Structure:
+  #+begin_ai
+  [ME]: Your question or prompt here
+  #+end_ai
+
+Usage:
+  1. Type the block
+  2. Add your question after [ME]:
+  3. C-c C-c (org-ctrl-c-ctrl-c) to execute
+  4. AI response appears with [AI]:
+
+Example:
+  #+begin_ai
+  [ME]: What is a closure in Emacs Lisp?
+  #+end_ai
+
+  [After C-c C-c, AI responds:]
+  [AI]: A closure in Emacs Lisp is...
+
+Block Options:
+  #+begin_ai :model gpt-4o
+  #+begin_ai :temperature 0.8
+  #+begin_ai :max-tokens 500
+  #+begin_ai :system \"You are a code reviewer\"
+
+Multiple options:
+  #+begin_ai :model gpt-4o :temperature 0.7
+  [ME]: Your question
+  #+end_ai
+
+Special Block Types:
+  #+begin_ai :image        - Generate images
+  #+begin_ai :refactor     - Refactor code
+  #+begin_ai :stream nil   - Disable streaming"))
+
+(demo-ai-block-syntax)
+#+END_SRC
+
+** Example: Simple Chat Block
+
+Here's what a real #+begin_ai block looks like in practice:
+
+#+BEGIN_EXAMPLE
+#+begin_ai
+[ME]: Explain the difference between `let` and `let*` in Emacs Lisp with examples.
+#+end_ai
+#+END_EXAMPLE
+
+When you execute this (C-c C-c on the block), the AI response appears like:
+
+#+BEGIN_EXAMPLE
+#+begin_ai
+[ME]: Explain the difference between `let` and `let*` in Emacs Lisp with examples.
+
+[AI]: The main difference between `let` and `let*` is how they bind variables:
+
+`let` - All bindings happen in parallel:
+```elisp
+(let ((x 1)
+      (y x))  ; Error! x not yet bound
+  (list x y))
+```
+
+`let*` - Bindings happen sequentially:
+```elisp
+(let* ((x 1)
+       (y x))  ; OK! x already bound
+  (list x y))
+;; => (1 1)
+```
+#+end_ai
+#+END_EXAMPLE
+
+** Continuing Conversations
+
+You can continue the conversation in the same block:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-conversation-continuation ()
+  "Explain conversation continuation."
+  (interactive)
+  (message "Continuing Conversations:
+
+In the same #+begin_ai block, add more messages:
+
+  #+begin_ai
+  [ME]: What is recursion?
+
+  [AI]: Recursion is when a function calls itself...
+
+  [ME]: Show me a recursive factorial function.
+
+  [AI]: Here's a recursive factorial:
+  (defun factorial (n) ...)
+
+  [ME]: Now show an iterative version.
+  #+end_ai
+
+Each time you add [ME]: and press C-c C-c,
+the AI has full context of previous messages.
+
+Tips:
+  - Keep related questions in one block
+  - Start new block for new topics
+  - Context is maintained within block
+  - Edit [ME]: messages and re-execute"))
+
+(demo-conversation-continuation)
+#+END_SRC
+
+* Available Commands
+
+** Interactive Commands
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-org-ai-commands ()
+  "Display org-ai interactive commands."
+  (interactive)
+  (message "org-ai Interactive Commands:
+
+All commands use prefix: C-c M-a
+
+💬 CHAT COMMANDS
+  C-c M-a c      org-ai-on-region              - Chat about region
+  C-c M-a C      org-ai-summarize              - Summarize text
+  C-c M-a e      org-ai-explain-code           - Explain code
+  C-c M-a .      org-ai-on-project             - Chat about project
+
+✏️  TEXT MODIFICATION
+  C-c M-a m      org-ai-modify-region          - Modify with prompt
+  C-c M-a g      org-ai-improve-writing        - Improve prose
+  C-c M-a x      org-ai-refactor-code          - Refactor code
+
+💻 CODE COMMANDS
+  C-c M-a r      org-ai-refactor-code          - Refactor selection
+  C-c M-a d      org-ai-complete-code          - Complete code
+
+🎨 IMAGE GENERATION
+  C-c M-a i      org-ai-image-variation        - Create image
+  C-c M-a I      org-ai-dalle-create-image     - DALL-E image
+
+🎤 SPEECH
+  C-c M-a t      org-ai-talk-input-toggle      - Toggle speech input
+  C-c M-a T      org-ai-talk-output-toggle     - Toggle speech output
+
+⚙️  UTILITY
+  C-c M-a s      org-ai-switch-chat-model      - Change model
+  C-c M-a !      org-ai-open-request-buffer    - Debug view
+
+Try: C-c M-a c with selected text!"))
+
+(demo-org-ai-commands)
+#+END_SRC
+
+** Block-Based vs Command-Based
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-usage-patterns ()
+  "Explain different usage patterns."
+  (interactive)
+  (message "Two Ways to Use org-ai:
+
+📝 BLOCK-BASED (Reproducible)
+  Use #+begin_ai blocks
+
+  Pros:
+  ✓ Reproducible
+  ✓ Documented in file
+  ✓ Version control friendly
+  ✓ Shareable
+  ✓ Context preserved
+  ✓ Export to PDF/HTML
+
+  Best for:
+  - Research notes
+  - Documentation
+  - Learning journals
+  - Tutorials
+  - Collaborative work
+
+⚡ COMMAND-BASED (Quick)
+  Use C-c M-a commands
+
+  Pros:
+  ✓ Faster workflow
+  ✓ Direct modifications
+  ✓ No block setup
+  ✓ In-place editing
+
+  Best for:
+  - Quick edits
+  - Code refactoring
+  - Improving writing
+  - Interactive work
+  - Exploratory tasks
+
+💡 COMBINED WORKFLOW
+  1. Explore with commands (C-c M-a)
+  2. Document with blocks (#+begin_ai)
+  3. Share/export the org file
+
+  Example:
+  - Use C-c M-a m to experiment
+  - Once happy, create #+begin_ai block
+  - Add [ME]: description of change
+  - Now it's documented!"))
+
+(demo-usage-patterns)
+#+END_SRC
+
+* Advanced Block Features
+
+** Block Options and Parameters
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-block-options ()
+  "Demonstrate #+begin_ai block options."
+  (interactive)
+  (message "#+begin_ai Block Options:
+
+🎯 MODEL SELECTION
+  #+begin_ai :model gpt-4o
+  #+begin_ai :model gpt-3.5-turbo
+  #+begin_ai :model gpt-4-turbo
+
+🌡️  TEMPERATURE (Creativity)
+  #+begin_ai :temperature 0.0    # Deterministic
+  #+begin_ai :temperature 0.7    # Balanced
+  #+begin_ai :temperature 1.5    # Creative
+
+📏 TOKEN LIMITS
+  #+begin_ai :max-tokens 500     # Short response
+  #+begin_ai :max-tokens 2000    # Long response
+
+🎭 SYSTEM PROMPT
+  #+begin_ai :system \"You are a code reviewer\"
+  #+begin_ai :system \"You are a teacher for beginners\"
+  #+begin_ai :system \"Be concise and technical\"
+
+📊 STREAMING
+  #+begin_ai :stream t           # Watch as it types
+  #+begin_ai :stream nil         # Wait for complete
+
+🖼️  IMAGE GENERATION
+  #+begin_ai :image
+  #+begin_ai :image :size 1024x1024
+  #+begin_ai :image :n 2         # Generate 2 images
+
+🔄 COMBINING OPTIONS
+  #+begin_ai :model gpt-4o :temperature 0.3 :max-tokens 1000
+  [ME]: Write production-ready code for...
+  #+end_ai
+
+  #+begin_ai :image :size 512x512
+  [ME]: A serene mountain landscape
+  #+end_ai"))
+
+(demo-block-options)
+#+END_SRC
+
+** Image Generation Blocks
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-image-generation ()
+  "Demonstrate image generation with org-ai."
+  (interactive)
+  (message "Image Generation with org-ai:
+
+Basic Syntax:
+  #+begin_ai :image
+  [ME]: A futuristic city at sunset
+  #+end_ai
+
+After C-c C-c:
+  - Image generates via DALL-E
+  - Saved to org-ai-image-directory
+  - Link appears in org file
+  - Image displays inline (if Emacs supports)
+
+Options:
+  #+begin_ai :image :size 1024x1024
+  #+begin_ai :image :size 512x512
+  #+begin_ai :image :n 2          # Generate 2 variations
+
+Image Directory:
+  Default: ~/org-ai-images/
+  Configure:
+    (setq org-ai-image-directory
+          (expand-file-name \"ai-images\" org-directory))
+
+Example Output:
+  #+begin_ai :image
+  [ME]: A serene lake with mountains
+
+  [[file:~/org-ai-images/image-2025-01-03-123456.png]]
+  #+end_ai
+
+Tips:
+  - Be descriptive in prompts
+  - Specify style/mood
+  - Iterate with variations
+  - Use :n for alternatives
+
+Cost: ~$0.02-0.08 per image depending on size"))
+
+(demo-image-generation)
+#+END_SRC
+
+** Code Refactoring Blocks
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-code-refactoring-blocks ()
+  "Demonstrate code refactoring with blocks."
+  (interactive)
+  (message "Code Refactoring with Blocks:
+
+Method 1: :refactor tag
+  #+begin_ai :refactor
+  [ME]: Improve this function:
+
+  ```elisp
+  (defun calc (a b c)
+    (+ (* a b) c))
+  ```
+
+  Add documentation and better names.
+  #+end_ai
+
+Method 2: Regular block with code
+  #+begin_ai
+  [ME]: Refactor this to use cl-lib:
+
+  #+begin_src emacs-lisp
+  (defun my-filter (pred list)
+    (let ((result '()))
+      (dolist (item list)
+        (when (funcall pred item)
+          (push item result)))
+      (nreverse result)))
+  #+end_src
+  #+end_ai
+
+Method 3: Code in the prompt
+  #+begin_ai :model gpt-4o :temperature 0.3
+  [ME]: Review and improve this code:
+  - Add error handling
+  - Use modern elisp idioms
+  - Add comprehensive docstring
+
+  (defun process-data (data)
+    (mapcar 'upcase data))
+  #+end_ai
+
+AI Response Includes:
+  - Refactored code
+  - Explanation of changes
+  - Why improvements are better
+  - Edge cases considered
+
+Copy refined code back to your source file!"))
+
+(demo-code-refactoring-blocks)
+#+END_SRC
+
+* Practical Workflows
+
+** Workflow 1: Research and Note-Taking
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-research-workflow ()
+  "Demonstrate research workflow."
+  (interactive)
+  (message "Research Workflow with org-ai:
+
+Example Research Session:
+
+* Understanding Emacs Advice System
+** Initial Questions
+
+#+begin_ai
+[ME]: Explain the Emacs advice system. What problem does it solve?
+
+[AI]: The advice system allows you to modify function behavior...
+
+[ME]: Show me examples of :before, :after, and :around advice.
+
+[AI]: Here are examples...
+
+[ME]: When should I use advice vs hooks?
+
+[AI]: Use advice when... Use hooks when...
+#+end_ai
+
+** Practical Examples
+
+#+begin_ai
+[ME]: Show me how to use advice to log all calls to 'message'
+
+[AI]: Here's how:
+#+begin_src emacs-lisp
+(defun my-message-logger (orig-fun &rest args)
+  (let ((msg (apply orig-fun args)))
+    (append-to-file (format \"[%s] %s\\n\" (current-time-string) msg)
+                    nil \"~/message-log.txt\")
+    msg))
+
+(advice-add 'message :around #'my-message-logger)
+#+end_src
+#+end_ai
+
+** Experiments
+[Try the code here, document results]
+
+Benefits:
+✓ Complete research log
+✓ Version controlled
+✓ Exportable (PDF, HTML)
+✓ Shareable with team
+✓ Reproducible learning"))
+
+(demo-research-workflow)
+#+END_SRC
+
+** Workflow 2: Documentation Generation
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-documentation-workflow ()
+  "Demonstrate documentation generation."
+  (interactive)
+  (message "Documentation Workflow:
+
+* Package Documentation
+** API Reference
+
+#+begin_ai
+[ME]: Generate API documentation for these functions:
+
+#+begin_src emacs-lisp
+(defun my-cache-get (key))
+(defun my-cache-set (key value &optional ttl))
+(defun my-cache-clear ())
+(defun my-cache-stats ())
+#+end_src
+
+Format as org table with: function, args, description, returns.
+#+end_ai
+
+** Usage Examples
+
+#+begin_ai
+[ME]: Write 5 practical usage examples for my-cache API
+#+end_ai
+
+** Installation Guide
+
+#+begin_ai
+[ME]: Write installation instructions for:
+- Manual install
+- MELPA install
+- use-package config
+- Straight.el
+#+end_ai
+
+** Troubleshooting
+
+#+begin_ai
+[ME]: Generate troubleshooting section for common cache issues:
+- Eviction too aggressive
+- Memory usage too high
+- Performance problems
+#+end_ai
+
+** Export
+Now export to:
+- C-c C-e h h (HTML)
+- C-c C-e l p (PDF)
+- C-c C-e m d (Markdown)
+
+Result: Professional documentation!"))
+
+(demo-documentation-workflow)
+#+END_SRC
+
+** Workflow 3: Learning Journal
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-learning-journal-workflow ()
+  "Demonstrate learning journal workflow."
+  (interactive)
+  (message "Learning Journal Workflow:
+
+* Daily Learning Log
+** <2025-01-03 Fri>
+
+*** Today's Goal: Learn Emacs Macros
+
+#+begin_ai
+[ME]: Explain Emacs macros. Why use macros vs functions?
+
+[AI]: Macros operate at compile time...
+#+end_ai
+
+*** Understanding
+
+My notes: Macros don't evaluate arguments...
+
+#+begin_ai
+[ME]: Show me a simple macro example and explain each part
+
+[AI]: Here's a basic macro:
+(defmacro when-let* ...)
+#+end_ai
+
+*** Practice
+
+#+begin_src emacs-lisp
+;; My attempt:
+(defmacro my-setq-default (var val)
+  `(setq-default ,var ,val))
+#+end_src
+
+#+begin_ai
+[ME]: Review my macro above. Is it correct? Any improvements?
+
+[AI]: Your macro is correct! However...
+#+end_ai
+
+*** Quiz Myself
+
+#+begin_ai
+[ME]: Quiz me on macros with 3 questions
+#+end_ai
+
+[Answer each question here]
+
+*** Summary
+- Learned: Macros vs functions
+- Practiced: Writing simple macros
+- Need to review: Macro hygiene
+
+Tomorrow: Advanced macro topics
+
+Benefits:
+✓ Structured learning
+✓ Interactive Q&A
+✓ Self-quizzing
+✓ Progress tracking
+✓ Review later"))
+
+(demo-learning-journal-workflow)
+#+END_SRC
+
+** Workflow 4: Code Review Documentation
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-code-review-workflow ()
+  "Demonstrate code review workflow."
+  (interactive)
+  (message "Code Review Documentation:
+
+* Code Review: PR #123 - Add caching system
+** Overview
+- Author: Alice
+- Date: 2025-01-03
+- Files: cache.el, cache-test.el
+
+** Review: cache.el
+
+#+begin_ai :system \"You are an expert code reviewer\"
+[ME]: Review this implementation:
+
+#+begin_src emacs-lisp
+(defun my-cache-set (key value &optional ttl)
+  (let ((entry (cons value (+ (time-to-seconds (current-time))
+                               (or ttl my-cache-default-ttl)))))
+    (setf (gethash key my-cache-table) entry)))
+#+end_src
+
+Check for:
+- Correctness
+- Edge cases
+- Performance
+- Documentation
+- Security
+#+end_ai
+
+[AI provides detailed review]
+
+** Issues Found
+1. [ ] No nil checking for key
+2. [ ] Race condition in multi-threaded use
+3. [ ] Missing docstring
+
+** Suggestions
+
+#+begin_ai
+[ME]: Suggest an improved version addressing above issues
+#+end_ai
+
+** Final Verdict
+- Approve with changes
+- Main concerns: [list]
+- Excellent: [list]
+
+** Follow-up
+#+begin_ai
+[ME]: Generate ert tests for the improved version
+#+end_ai
+
+Result: Documented, thorough review!"))
+
+(demo-code-review-workflow)
+#+END_SRC
+
+* Integration with org-mode Features
+
+** org-babel Integration
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-org-babel-integration ()
+  "Demonstrate org-ai with org-babel."
+  (interactive)
+  (message "org-ai + org-babel Integration:
+
+Generate code with org-ai, execute with babel!
+
+Example:
+
+#+begin_ai
+[ME]: Write a function to fetch JSON from a URL using plz.el
+#+end_ai
+
+[AI provides code]
+
+Now test it:
+
+#+begin_src emacs-lisp :results output
+(defun fetch-json (url)
+  ;; [AI-generated code here]
+  )
+
+(fetch-json \"https://api.example.com/data\")
+#+end_src
+
+#+RESULTS:
+: {\"status\": \"ok\", ...}
+
+Workflow:
+1. Ask AI for code (#+begin_ai)
+2. Copy to src block
+3. Execute with C-c C-c
+4. If issues, ask AI in same document
+5. Iterate until working
+
+Result: Documented, tested, reproducible!
+
+Also useful for:
+- Data analysis scripts
+- Example demonstrations
+- Tutorial generation
+- Test-driven development"))
+
+(demo-org-babel-integration)
+#+END_SRC
+
+** Export and Sharing
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-export-sharing ()
+  "Demonstrate exporting org-ai documents."
+  (interactive)
+  (message "Exporting and Sharing:
+
+org-ai documents export like regular org files!
+
+📄 EXPORT FORMATS
+  C-c C-e h h    HTML
+  C-c C-e l p    PDF (requires LaTeX)
+  C-c C-e m d    Markdown
+  C-c C-e t u    UTF-8 text
+
+🎨 WHAT EXPORTS
+  ✓ #+begin_ai blocks (as code blocks)
+  ✓ Conversation history
+  ✓ Generated images (as images)
+  ✓ All formatting
+  ✓ Code blocks
+  ✓ Tables
+
+⚙️  EXPORT CUSTOMIZATION
+  Hide [ME]/[AI] markers:
+  #+OPTIONS: ...custom export settings...
+
+  Include/exclude blocks:
+  #+begin_ai :noexport
+  [ME]: Internal notes...
+  #+end_ai
+
+📤 SHARING WORKFLOWS
+
+1. Share HTML:
+   - Generate: C-c C-e h h
+   - Upload to web server
+   - Or email HTML file
+
+2. Share PDF:
+   - Generate: C-c C-e l p
+   - Professional looking
+   - Print-friendly
+
+3. Share on GitHub:
+   - Org renders on GitHub
+   - Images display inline
+   - Markdown export: C-c C-e m d
+
+4. Team Wiki:
+   - Export to wiki format
+   - Or use org-publish
+
+Use Cases:
+- Research papers
+- Technical documentation
+- Learning materials
+- Team knowledge base
+- Blog posts"))
+
+(demo-export-sharing)
+#+END_SRC
+
+** TODO Integration
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-todo-integration ()
+  "Demonstrate org-ai with TODOs."
+  (interactive)
+  (message "org-ai + TODO Integration:
+
+Generate and manage TODOs with AI!
+
+* Project: Build Cache System
+** Planning
+
+#+begin_ai
+[ME]: Help me break down this project into tasks:
+
+Goal: Build an in-memory cache with:
+- TTL support
+- LRU eviction
+- Statistics
+- Thread safety
+
+Generate org TODO list.
+#+end_ai
+
+[AI generates:]
+
+** Tasks
+*** TODO Design API
+*** TODO Implement core cache structure
+*** TODO Add TTL tracking
+*** TODO Implement LRU eviction
+*** TODO Add thread safety
+*** TODO Write tests
+*** TODO Write documentation
+
+** Implementation Notes
+
+*** TODO Implement core cache structure
+SCHEDULED: <2025-01-04>
+
+#+begin_ai
+[ME]: What data structure should I use for the cache?
+Consider: fast lookup, TTL tracking, LRU eviction
+#+end_ai
+
+[AI suggests hash table + doubly-linked list]
+
+[After implementation:]
+- State \"DONE\"       from \"TODO\"       [2025-01-04]
+
+Workflow:
+1. AI helps plan TODOs
+2. Schedule tasks
+3. AI assists with each task
+4. Document in same file
+5. Track progress with org-agenda
+
+Benefits:
+✓ AI-assisted planning
+✓ Task breakdown
+✓ Progress tracking
+✓ Context preserved
+✓ Shareable project plan"))
+
+(demo-todo-integration)
+#+END_SRC
+
+* Tips and Best Practices
+
+** Effective Prompting in org-ai
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-prompting-tips ()
+  "Prompting tips specific to org-ai."
+  (interactive)
+  (message "Effective Prompting in org-ai:
+
+✓ USE CONTEXT
+  Include code, previous discussions in same block
+  AI sees entire #+begin_ai block history
+
+✓ BE SPECIFIC WITH FORMAT
+  'Generate as org table'
+  'Format as numbered list'
+  'Show as code block'
+  'Create as TODO items'
+
+✓ LEVERAGE SYSTEM PROMPTS
+  #+begin_ai :system \"You are a code reviewer\"
+  #+begin_ai :system \"Explain like I'm a beginner\"
+
+✓ BREAK INTO SECTIONS
+  Use org headings to organize:
+  ** Questions
+  ** Implementation
+  ** Review
+
+✓ USE TEMPERATURE WISELY
+  :temperature 0.0 - For code/factual
+  :temperature 0.7 - For explanation
+  :temperature 1.0 - For creative writing
+
+✓ ITERATE IN SAME BLOCK
+  [ME]: First question
+  [AI]: Response
+  [ME]: Follow-up
+  [AI]: Response
+  Context is maintained!
+
+✓ EMBED CODE
+  Use #+begin_src blocks in [ME]: prompts
+  AI understands code structure
+
+✗ AVOID
+  - Overly long prompts
+  - Mixing unrelated topics in one block
+  - Vague requests
+  - Forgetting to specify output format"))
+
+(demo-prompting-tips)
+#+END_SRC
+
+** Common AI Mistakes with Emacs Lisp
+
+OpenAI models (used by org-ai) sometimes confuse Lisp dialects. Learn to spot and fix these issues:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-common-ai-mistakes ()
+  "Common mistakes AI makes with Emacs Lisp in org-ai."
+  (interactive)
+  (message "Common AI Mistakes in org-ai:
+
+🚨 DIALECT CONFUSION: Common Lisp vs Emacs Lisp
+
+Most common problem when asking for code!
+
+❌ WRONG - AI generates Common Lisp:
+#+begin_ai
+[ME]: Write a function to print a list
+
+[AI]:
+(defun print-list (items)
+  (loop for item in items
+    do (format t \"%%s\" item)))    ; ← Common Lisp!
+#+end_ai
+
+✓ CORRECT - Request Emacs Lisp specifically:
+#+begin_ai :system \"You are an Emacs Lisp expert\"
+[ME]: Write an EMACS LISP function to print a list
+
+[AI]:
+(defun print-list (items)
+  (dolist (item items)
+    (message \"%%s\" item)))        ; ← Emacs Lisp!
+#+end_ai
+
+Red Flags to Spot:
+  🚩 format t          → Should be: message
+  🚩 (loop for ...)    → Should be: dolist or cl-loop
+  🚩 defparameter      → Should be: defvar
+  🚩 plain incf/decf   → Should be: cl-incf/cl-decf
+
+Fix Strategy for org-ai:
+1. Add to [ME]: 'Write EMACS LISP (not Common Lisp)'
+2. Use system prompt: :system \"Emacs Lisp expert\"
+3. If wrong, add [ME]: 'Rewrite as Emacs Lisp'
+4. Test code in org-babel block before using
+
+Testing in org-ai:
+#+begin_src emacs-lisp
+;; Paste AI-generated code here
+;; C-c C-c to execute
+;; If error 'stringp t' → Common Lisp detected!
+#+end_src"))
+
+(demo-common-ai-mistakes)
+#+END_SRC
+
+** Real Example in org-ai Block
+
+Here's how the dialect confusion appears in actual org-ai usage:
+
+#+BEGIN_EXAMPLE
+,#+begin_ai
+[ME]: Write a FizzBuzz function
+
+[AI]: Here's a FizzBuzz function:
+
+```elisp
+(defun fizzbuzz (n)
+  (dotimes (i n)
+    (format t "%%d\\n" i)))    ; ← WRONG! Common Lisp
+```
+,#+end_ai
+
+When you try to run this code:
+ERROR: wrong-type-argument stringp t
+
+SOLUTION - Add follow-up in same block:
+,#+begin_ai
+[ME]: Write a FizzBuzz function
+
+[AI]: Here's a FizzBuzz function:
+```elisp
+(defun fizzbuzz (n)
+  (dotimes (i n)
+    (format t "%%d\\n" i)))
+```
+
+[ME]: This is Common Lisp. Rewrite for Emacs Lisp specifically.
+Use 'message' not 'format t'.
+
+[AI]: You're right! Here's the Emacs Lisp version:
+```elisp
+(defun fizzbuzz (n)
+  (dotimes (i n)
+    (let ((num (1+ i)))
+      (cond
+       ((zerop (mod num 15)) (message "FizzBuzz"))
+       ((zerop (mod num 3))  (message "Fizz"))
+       ((zerop (mod num 5))  (message "Buzz"))
+       (t (message "%%d" num))))))
+```
+,#+end_ai
+#+END_EXAMPLE
+
+** Better Prompts for Code Generation
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-better-code-prompts ()
+  "How to get correct Emacs Lisp from org-ai."
+  (interactive)
+  (message "Getting Correct Emacs Lisp from org-ai:
+
+✓ USE EXPLICIT SYSTEM PROMPT
+  #+begin_ai :system \"You are an Emacs Lisp expert. Only generate Emacs Lisp, never Common Lisp.\"
+
+✓ SPECIFY IN PROMPT
+  [ME]: Write an EMACS LISP function (not Common Lisp) that...
+
+✓ REQUEST MODERN IDIOMS
+  [ME]: Use modern Emacs 29 features and seq.el functions
+
+✓ INCLUDE CONSTRAINTS
+  [ME]: Write Emacs Lisp using:
+  - message for output
+  - dolist for iteration
+  - seq.el for sequences
+  - cl-lib prefix for Common Lisp functions
+
+✓ USE TEMPERATURE FOR CODE
+  #+begin_ai :temperature 0.1
+  Lower temperature = more deterministic = fewer mistakes
+
+✓ TEST IN ORG-BABEL
+  #+begin_src emacs-lisp :results output
+  ;; Paste AI code here
+  (fizzbuzz 15)
+  #+end_src
+
+  Execute with C-c C-c to verify
+
+✓ ITERATIVE CORRECTION
+  If AI makes mistake, continue in same block:
+  [ME]: That's Common Lisp. Convert to Emacs Lisp.
+  Context is preserved!
+
+Example Perfect Prompt:
+#+begin_ai :system \"Emacs Lisp expert\" :temperature 0.2
+[ME]: Write an EMACS LISP function to filter a list.
+Use seq-filter, not Common Lisp functions.
+Include docstring and examples.
+#+end_ai"))
+
+(demo-better-code-prompts)
+#+END_SRC
+
+** dotimes vs dolist Mistakes
+
+org-ai frequently mixes up iteration functions:
+
+#+BEGIN_SRC emacs-lisp
+;; COMMON MISTAKE in org-ai responses:
+(defun greet-wrong ()
+  (let ((names '("Alice" "Bob")))
+    (dotimes (name names)         ; ← WRONG TYPE!
+      (message "Hello, %s!" name))))
+
+;; Error: wrong-type-argument number-or-marker-p
+
+;; CORRECT VERSION:
+(defun greet-correct ()
+  (let ((names '("Alice" "Bob")))
+    (dolist (name names)          ; ← CORRECT!
+      (message "Hello, %s!" name))))
+
+;; Test in org-babel:
+(greet-correct)
+
+(message "✓ dotimes for numbers, dolist for lists!")
+#+END_SRC
+
+** Test Code in org-babel Blocks
+
+Always test AI-generated code before using it:
+
+#+BEGIN_EXAMPLE
+,#+begin_ai
+[ME]: Write a function to print numbers 1-5
+[AI]: (generated code here)
+,#+end_ai
+
+Test immediately:
+,#+begin_src emacs-lisp :results output
+(defun print-numbers ()
+  ;; paste AI code here
+  )
+
+(print-numbers)
+,#+end_src
+
+C-c C-c to execute and verify!
+#+END_EXAMPLE
+
+** Iteration Functions Reference
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-org-ai-iteration ()
+  "Iteration reference for org-ai users."
+  (interactive)
+  (message "Iteration in Emacs Lisp:
+
+FOR NUMBERS - Use dotimes
+  (dotimes (i 5)
+    (message \"Count: %%d\" i))
+  Output: 0, 1, 2, 3, 4
+
+FOR LISTS - Use dolist
+  (dolist (item '(a b c))
+    (message \"Item: %%s\" item))
+  Output: a, b, c
+
+FOR CONDITIONS - Use while
+  (let ((i 0))
+    (while (< i 3)
+      (message \"%%d\" i)
+      (setq i (1+ i))))
+  Output: 0, 1, 2
+
+Ask org-ai specifically:
+  #+begin_ai
+  [ME]: Use DOLIST to iterate over '(\"Alice\" \"Bob\")
+  [AI]: (will use dolist correctly)
+  #+end_ai
+
+  #+begin_ai
+  [ME]: Use DOTIMES to count from 0 to 9
+  [AI]: (will use dotimes correctly)
+  #+end_ai
+
+Be explicit about which function!"))
+
+(demo-org-ai-iteration)
+#+END_SRC
+
+** Unwanted Code in Responses
+
+org-ai may add unnecessary customization code:
+
+#+BEGIN_SRC emacs-lisp
+;; Asked for simple function, got:
+(defgroup my-pkg nil           ; ← Not needed!
+  "Package"
+  :group 'tools)
+
+(defcustom my-opt t            ; ← Not needed!
+  "Option"
+  :type 'boolean)
+
+(defun my-function ()          ; ← This is what you wanted
+  (message "Hello"))
+
+(provide 'my-pkg)              ; ← Not needed!
+
+;; Often the defgroup has wrong syntax!
+
+(message "Tip: Extract just the defun you need")
+#+END_SRC
+
+** Restrictive Prompts in org-ai Blocks
+
+#+BEGIN_EXAMPLE
+BAD - Too open:
+,#+begin_ai
+[ME]: Write a greeting function
+,#+end_ai
+
+Result: Gets defgroup, defcustom, provide, etc.
+
+GOOD - Restrictive:
+,#+begin_ai :system "Emacs Lisp expert"
+[ME]: Write ONLY the Emacs Lisp function definition.
+Do NOT include: defgroup, defcustom, provide, require.
+Function name: greet-names
+Use dolist to iterate '("Alice" "Bob")
+Use message for output
+Return format:
+(defun greet-names () ...body...)
+That's it.
+,#+end_ai
+
+Result: Just the function!
+
+If AI adds extras:
+,#+begin_ai
+[ME]: Previous code has defgroup which I don't need.
+Please return ONLY the defun, nothing else.
+,#+end_ai
+#+END_EXAMPLE
+
+** Managing Costs
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-cost-management ()
+  "Tips for managing OpenAI API costs."
+  (interactive)
+  (message "Managing API Costs:
+
+💰 COST STRUCTURE
+  gpt-3.5-turbo: ~$0.0015/1K tokens (cheap)
+  gpt-4o: ~$0.01/1K tokens (moderate)
+  DALL-E: ~$0.02-0.08/image
+
+  Average conversation: 500-2000 tokens
+  1K tokens ≈ 750 words
+
+💡 COST-SAVING STRATEGIES
+
+1. Use gpt-3.5-turbo by default
+   #+begin_ai :model gpt-3.5-turbo
+   Switch to gpt-4o only when needed
+
+2. Set token limits
+   #+begin_ai :max-tokens 500
+   Shorter responses = lower cost
+
+3. Be concise
+   Short prompts = less cost
+   Don't paste huge code blocks
+
+4. Batch questions
+   Ask multiple things in one prompt
+   vs multiple separate queries
+
+5. Reuse blocks
+   Continue conversation in same block
+   vs starting new blocks
+
+6. Monitor usage
+   Check OpenAI dashboard regularly
+   Set up billing alerts
+
+7. Use temperature wisely
+   Lower temperature = more focused = less retries
+
+📊 ESTIMATE COSTS
+  Research session (10 queries): $0.05-0.10
+  Code generation (5 functions): $0.10-0.20
+  Documentation (full package): $0.20-0.50
+  Image generation (10 images): $0.20-0.80
+
+💵 ALTERNATIVES
+  - GPT-3.5 for simple tasks
+  - Local models (Ollama) for privacy
+  - Combine: org-ai for docs, Ellama for local"))
+
+(demo-cost-management)
+#+END_SRC
+
+** Organizing org-ai Documents
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-document-organization ()
+  "Best practices for organizing org-ai documents."
+  (interactive)
+  (message "Organizing org-ai Documents:
+
+📁 STRUCTURE EXAMPLES
+
+1. Learning Journal:
+   ~/org/learning/
+     ├── 2025-01-emacs-lisp.org
+     ├── 2025-01-web-development.org
+     └── topics-index.org
+
+2. Project Documentation:
+   ~/projects/my-package/docs/
+     ├── design-decisions.org (with #+begin_ai)
+     ├── api-reference.org
+     └── troubleshooting.org
+
+3. Research Notes:
+   ~/org/research/
+     ├── emacs-performance.org
+     ├── ai-tools-comparison.org
+     └── best-practices.org
+
+📋 TEMPLATE EXAMPLE
+
+#+begin_src org
+,#+TITLE: {{Topic Name}}
+,#+DATE: [{{date}}]
+,#+FILETAGS: :ai:learning:elisp:
+
+,* Overview
+Brief description
+
+,* Questions and Exploration
+,#+begin_ai
+[ME]: Initial questions...
+,#+end_ai
+
+,* Key Learnings
+- Point 1
+- Point 2
+
+,* Examples
+,#+begin_src emacs-lisp
+;; Code examples
+,#+end_src
+
+,* References
+- [[link][Description]]
+
+,* TODO Follow-up
+- [ ] Topic to explore
+#+end_src
+
+🏷️  TAGGING STRATEGY
+  #+FILETAGS: :ai:code:elisp:
+  #+FILETAGS: :ai:research:performance:
+  #+FILETAGS: :ai:documentation:
+
+  Search with: C-c a m (org-tags-view)
+
+🔗 LINKING
+  [[file:other-note.org::*Section]]
+  [[file:code.el::123]]
+  Build knowledge network!
+
+✅ BEST PRACTICES
+  ✓ One topic per file
+  ✓ Descriptive filenames
+  ✓ Use tags consistently
+  ✓ Link related files
+  ✓ Regular exports (backup)
+  ✓ Version control (git)"))
+
+(demo-document-organization)
+#+END_SRC
+
+** Common Pitfalls
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-common-pitfalls ()
+  "Common pitfalls and solutions."
+  (interactive)
+  (message "Common Pitfalls:
+
+❌ API Key Not Found
+   ✓ Check: org-ai-openai-api-token
+   ✓ Or: (getenv \"OPENAI_API_KEY\")
+   ✓ Fix: (setq org-ai-openai-api-token \"sk-...\")
+
+❌ org-ai-mode Not Enabled
+   ✓ Check: M-x org-ai-mode
+   ✓ Fix: (add-hook 'org-mode-hook #'org-ai-mode)
+   ✓ Or: Add to config
+
+❌ Block Doesn't Execute
+   ✓ Verify: #+begin_ai (not #+BEGIN_AI)
+   ✓ Cursor must be on block
+   ✓ Press: C-c C-c (not C-c C-x)
+
+❌ No Response Appears
+   ✓ Check *Messages* buffer for errors
+   ✓ Verify API key is valid
+   ✓ Check internet connection
+   ✓ Try :stream nil for debugging
+
+❌ Wrong Model Used
+   ✓ Set in block: #+begin_ai :model gpt-4o
+   ✓ Or globally: org-ai-default-chat-model
+
+❌ Images Don't Generate
+   ✓ Use :image flag
+   ✓ Check org-ai-image-directory exists
+   ✓ Verify DALL-E access
+   ✓ Descriptive prompt required
+
+❌ Expensive Bills
+   ✓ Use gpt-3.5-turbo for simple tasks
+   ✓ Set :max-tokens limits
+   ✓ Monitor OpenAI dashboard
+   ✓ Set billing alerts
+
+❌ Slow Responses
+   ✓ Use :stream t to see progress
+   ✓ Try smaller model
+   ✓ Reduce :max-tokens
+   ✓ Check network
+
+❌ Context Not Maintained
+   ✓ Keep conversation in same block
+   ✓ Don't close/reopen blocks
+   ✓ Each block is separate session"))
+
+(demo-common-pitfalls)
+#+END_SRC
+
+* Comparison with Other Tools
+
+** org-ai vs gptel vs Ellama
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-tool-comparison ()
+  "Compare org-ai with other AI tools."
+  (interactive)
+  (message "org-ai vs Other AI Tools:
+
+📊 org-ai
+  Focus: Org-mode native integration
+  Pros:
+    ✓ Reproducible research format
+    ✓ Export-friendly (PDF, HTML)
+    ✓ Version control friendly
+    ✓ Structured documentation
+    ✓ Image generation built-in
+    ✓ Context preserved in document
+  Cons:
+    ✗ Only works in org-mode
+    ✗ OpenAI only (no Anthropic/Ollama)
+    ✗ Requires org knowledge
+  Best for:
+    - Research and note-taking
+    - Documentation
+    - Learning journals
+    - Shareable content
+
+📊 gptel
+  Focus: Simple, universal LLM client
+  Pros:
+    ✓ Works in any buffer
+    ✓ Multiple backends (OpenAI, Claude, Ollama)
+    ✓ Minimal setup
+    ✓ Lightweight
+  Cons:
+    ✗ Less structure
+    ✗ No native org integration
+    ✗ No image generation
+  Best for:
+    - Quick queries
+    - In-buffer assistance
+    - Multiple LLM providers
+    - Minimal interface
+
+📊 Ellama
+  Focus: Ollama integration
+  Pros:
+    ✓ Local models (privacy)
+    ✓ Free (no API costs)
+    ✓ Many specialized commands
+    ✓ Offline capable
+  Cons:
+    ✗ Ollama only
+    ✗ Requires local resources
+    ✗ Less structured output
+  Best for:
+    - Privacy-sensitive work
+    - Cost-free usage
+    - Local development
+
+💡 USE THEM TOGETHER!
+  - org-ai: Documentation and research
+  - gptel: Quick coding questions
+  - Ellama: Private/offline work
+
+  They complement each other!"))
+
+(demo-tool-comparison)
+#+END_SRC
+
+* Conclusion
+
+** Summary
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-summary ()
+  "Summarize org-ai capabilities."
+  (interactive)
+  (message "org-ai Summary:
+
+✅ What You Learned:
+   - #+begin_ai blocks for chat
+   - Interactive commands (C-c M-a)
+   - Image generation
+   - Code refactoring
+   - Block options
+   - Integration with org features
+   - Export and sharing
+
+🎯 Unique Strengths:
+   - Native org-mode integration
+   - Reproducible research format
+   - Version control friendly
+   - Export to multiple formats
+   - Document-centric AI interaction
+   - Context preserved in files
+
+📚 Key Features:
+   - Chat blocks with [ME]/[AI]
+   - Image generation (DALL-E)
+   - Code refactoring
+   - Speech I/O (Whisper)
+   - Multiple model support
+   - System prompts
+   - Token control
+
+🎓 Best Used For:
+   ✓ Research and note-taking
+   ✓ Documentation generation
+   ✓ Learning journals
+   ✓ Code review documentation
+   ✓ Tutorial creation
+   ✓ Knowledge management
+   ✓ Shareable AI interactions
+
+🚀 Next Steps:
+   1. Install: M-x package-install RET org-ai
+   2. Set API key: org-ai-openai-api-token
+   3. Enable: (add-hook 'org-mode-hook #'org-ai-mode)
+   4. Create org file
+   5. Try: #+begin_ai block
+   6. Explore commands: C-c M-a
+   7. Export your work: C-c C-e
+
+🔗 Resources:
+   - GitHub: https://github.com/rksm/org-ai
+   - OpenAI: https://platform.openai.com/
+   - This demo.org file!
+
+Happy AI-powered org-mode! 📝✨"))
+
+(demo-summary)
+#+END_SRC
+
+** Practice Exercises
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-practice-exercises ()
+  "Suggest practice exercises."
+  (interactive)
+  (message "Practice Exercises:
+
+Try these to master org-ai:
+
+1️⃣  BASIC CHAT
+   Create a #+begin_ai block
+   Ask 3 questions about a topic
+   Continue the conversation
+
+2️⃣  CODE GENERATION
+   Ask AI to write a function
+   Test it with org-babel
+   Improve with AI feedback
+
+3️⃣  DOCUMENTATION
+   Take an existing function
+   Generate docstring
+   Create usage examples
+   Generate tests
+
+4️⃣  LEARNING PROJECT
+   Create learning.org
+   Pick a topic (e.g., macros)
+   Use AI to learn progressively
+   Document your journey
+
+5️⃣  IMAGE GENERATION
+   Create #+begin_ai :image block
+   Generate 3 different images
+   Experiment with descriptions
+
+6️⃣  REFACTORING
+   Find legacy code
+   Use AI to refactor
+   Document changes
+   Compare old/new
+
+7️⃣  RESEARCH PROJECT
+   Create research.org
+   Explore complex topic
+   Use multiple #+begin_ai blocks
+   Export to PDF
+
+8️⃣  CODE REVIEW
+   Review a pull request
+   Use AI for analysis
+   Document findings
+   Generate improvement suggestions
+
+Start simple, build complexity!"))
+
+(demo-practice-exercises)
+#+END_SRC
+
+* Local Variables                                                  :ARCHIVE:
+# Local Variables:
+# eval: (org-babel-do-load-languages 'org-babel-load-languages '((emacs-lisp . t)))
+# End:

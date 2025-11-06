@@ -1,0 +1,17 @@
+Write an Emacs Lisp function called `greet-names` that:
+  - Takes NO arguments
+  - Creates a list of 3 names: "Alice", "Bob", "Charlie"
+  - Iterates over the list using `dolist` (NOT dotimes, NOT loop)
+  - For each name, outputs "Hello, [name]!" using `message` function
+  - This is EMACS LISP, not Common Lisp
+  - Do NOT use: format t, loop, cl-loop, mapcar
+  - DO use: dolist for iteration, message for output
+  - Include a docstring
+
+  Example of what I want to see:
+  (greet-names) should print:
+  Hello, Alice!
+  Hello, Bob!
+  Hello, Charlie!
+
+

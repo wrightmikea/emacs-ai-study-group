@@ -1,0 +1,814 @@
+#+TITLE: elisp-dev-mcp Interactive Demo
+#+AUTHOR: Emacs AI Study Group
+#+DATE: [2025-01-03]
+#+PROPERTY: header-args:emacs-lisp :results output :exports both
+#+PROPERTY: header-args:shell :results output :exports both
+#+STARTUP: showeverything
+
+* Introduction
+
+This document provides a hands-on demonstration of elisp-dev-mcp, a Model Context
+Protocol (MCP) server that enables AI assistants to interact with your Emacs environment.
+
+*Prerequisites:*
+- Node.js and npm installed
+- Claude Desktop or another MCP client
+- Emacs running with server-mode enabled
+
+*What is MCP?*
+The Model Context Protocol is a standard for connecting AI assistants to external tools
+and data sources. elisp-dev-mcp allows Claude and other AI assistants to:
+- Query Emacs documentation
+- Execute elisp code
+- Access buffer contents
+- Interact with your development environment
+
+*How to use this document:*
+1. Position cursor in any code block
+2. Press =C-c C-c= to execute the code
+3. Results will appear below the code block
+
+* Environment Setup
+
+** Bootstrap Package System (Optional - for helper packages)
+
+If you're running this with =emacs -Q= and want to install helper packages like =helpful= or =elisp-demos=, execute this block:
+
+#+BEGIN_SRC emacs-lisp
+;; Initialize package.el
+(require 'package)
+
+;; Add MELPA if not already present
+(unless (assoc "melpa" package-archives)
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t))
+
+;; Initialize packages
+(unless package--initialized
+  (package-initialize))
+
+;; Refresh package contents if needed
+(unless package-archive-contents
+  (message "Refreshing package archive contents...")
+  (package-refresh-contents))
+
+(message "✓ Package system initialized with MELPA")
+#+END_SRC
+
+** Install Helper Packages (Optional)
+
+These packages enhance elisp development but are not required for MCP:
+
+#+BEGIN_SRC emacs-lisp
+;; Install helpful (better help buffers)
+(unless (package-installed-p 'helpful)
+  (message "Installing helpful...")
+  (condition-case err
+      (progn
+        (package-install 'helpful)
+        (message "✓ helpful installed"))
+    (error
+     (message "✗ Failed to install helpful: %s" err))))
+
+;; Install elisp-demos (examples in help)
+(unless (package-installed-p 'elisp-demos)
+  (message "Installing elisp-demos...")
+  (condition-case err
+      (progn
+        (package-install 'elisp-demos)
+        (message "✓ elisp-demos installed"))
+    (error
+     (message "✗ Failed to install elisp-demos: %s" err))))
+
+(message "✓ Helper packages processed")
+#+END_SRC
+
+** Check Node.js Installation
+
+#+BEGIN_SRC shell
+node --version && npm --version
+#+END_SRC
+
+** Verify elisp-dev-mcp Installation
+
+Check if the MCP server is installed globally or locally.
+
+#+BEGIN_SRC shell
+if command -v npx &> /dev/null; then
+    echo "✓ npx is available"
+    echo "You can run: npx -y elisp-dev-mcp"
+else
+    echo "✗ npx not found. Please install Node.js"
+fi
+#+END_SRC
+
+** Check Emacs Server Status
+
+Verify that Emacs server is running (required for MCP communication).
+
+#+BEGIN_SRC emacs-lisp
+(if (server-running-p)
+    (message "✓ Emacs server is running")
+  (progn
+    (server-start)
+    (message "✓ Emacs server started")))
+#+END_SRC
+
+* MCP Client Configuration
+
+** Claude Desktop Configuration
+
+Here's how to configure Claude Desktop to use elisp-dev-mcp:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-show-claude-config ()
+  "Display Claude Desktop configuration for elisp-dev-mcp."
+  (interactive)
+  (let* ((config-paths
+          (cond
+           ((eq system-type 'darwin)
+            "~/Library/Application Support/Claude/claude_desktop_config.json")
+           ((eq system-type 'windows-nt)
+            "%APPDATA%\\Claude\\claude_desktop_config.json")
+           (t "~/.config/Claude/claude_desktop_config.json")))
+         (config-example
+          "{
+  \"mcpServers\": {
+    \"elisp-dev\": {
+      \"command\": \"npx\",
+      \"args\": [\"-y\", \"elisp-dev-mcp\"]
+    }
+  }
+}"))
+    (message "Claude Desktop Config Location:\n%s\n\nAdd this configuration:\n%s"
+             config-paths
+             config-example)))
+
+(demo-show-claude-config)
+#+END_SRC
+
+** Verify Configuration File
+
+Create or check the Claude Desktop configuration file:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-check-claude-config ()
+  "Check if Claude Desktop config exists."
+  (interactive)
+  (let ((config-path
+         (cond
+          ((eq system-type 'darwin)
+           (expand-file-name "~/Library/Application Support/Claude/claude_desktop_config.json"))
+          (t "~/.config/Claude/claude_desktop_config.json"))))
+    (if (file-exists-p config-path)
+        (message "✓ Config exists at: %s\nContents:\n%s"
+                 config-path
+                 (with-temp-buffer
+                   (insert-file-contents config-path)
+                   (buffer-string)))
+      (message "✗ Config not found at: %s\nCreate it with the configuration shown above."
+               config-path))))
+
+(demo-check-claude-config)
+#+END_SRC
+
+* Emacs-Side Configuration
+
+** Enable Server Mode
+
+Ensure Emacs server is always running when needed:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-setup-server ()
+  "Demonstrate server setup for MCP."
+  (interactive)
+  (message "Server Setup for MCP:
+
+Add to your init.el:
+
+(use-package server
+  :config
+  (unless (server-running-p)
+    (server-start)))
+
+This allows MCP clients to communicate with Emacs.
+
+Current server status: %s"
+           (if (server-running-p) "RUNNING" "NOT RUNNING")))
+
+(demo-setup-server)
+#+END_SRC
+
+** Enhanced Elisp Development Tools
+
+Install helpful packages for better elisp development:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-dev-tools ()
+  "Show recommended development tools."
+  (interactive)
+  (message "Recommended Elisp Development Tools:
+
+1. helpful - Better help buffers
+   (use-package helpful
+     :ensure t
+     :bind ((\"C-h f\" . helpful-callable)
+            (\"C-h v\" . helpful-variable)
+            (\"C-h k\" . helpful-key)))
+
+2. elisp-demos - Show examples in help
+   (use-package elisp-demos
+     :ensure t
+     :config
+     (advice-add 'helpful-update :after #'elisp-demos-advice-helpful-update))
+
+3. paredit - Structured editing
+   (use-package paredit
+     :ensure t
+     :hook (emacs-lisp-mode . paredit-mode))
+
+4. rainbow-delimiters - Visual aid
+   (use-package rainbow-delimiters
+     :ensure t
+     :hook (prog-mode . rainbow-delimiters-mode))"))
+
+(demo-dev-tools)
+#+END_SRC
+
+* Testing MCP Integration
+
+** Example MCP Use Cases
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-mcp-use-cases ()
+  "Demonstrate what you can do with MCP."
+  (interactive)
+  (message "What you can do with elisp-dev-mcp and Claude:
+
+1. Documentation Queries:
+   Ask Claude: 'Look up the documentation for mapcar'
+   → MCP server queries Emacs help system
+
+2. Code Execution:
+   Ask Claude: 'Evaluate this elisp: (+ 2 2)'
+   → MCP server executes code in Emacs
+
+3. Buffer Operations:
+   Ask Claude: 'What buffers are currently open?'
+   → MCP server queries buffer-list
+
+4. Environment Inspection:
+   Ask Claude: 'What packages do I have installed?'
+   → MCP server checks package-activated-list
+
+5. Interactive Development:
+   Ask Claude: 'Help me debug this function: (defun foo ...)'
+   → MCP server can analyze and test code
+
+6. Configuration Help:
+   Ask Claude: 'Show me my current theme settings'
+   → MCP server inspects Emacs variables"))
+
+(demo-mcp-use-cases)
+#+END_SRC
+
+** Testing Communication
+
+Create a simple test to verify MCP connectivity:
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-test-emacs-state ()
+  "Display current Emacs state (useful for MCP testing)."
+  (interactive)
+  (message "Current Emacs State:
+
+Version: %s
+Server Running: %s
+Open Buffers: %d
+Loaded Features: %d
+Current Buffer: %s
+Current Mode: %s
+Point Position: %d
+
+This information is accessible via MCP."
+           emacs-version
+           (if (server-running-p) "Yes" "No")
+           (length (buffer-list))
+           (length features)
+           (buffer-name)
+           major-mode
+           (point)))
+
+(demo-test-emacs-state)
+#+END_SRC
+
+* Practical Workflows
+
+** Workflow 1: Documentation Lookup
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-doc-lookup-workflow ()
+  "Demonstrate documentation lookup workflow."
+  (interactive)
+  (message "Documentation Lookup Workflow:
+
+Scenario: You're writing elisp and need help
+
+1. In Claude Desktop (with MCP configured):
+   You: 'What does seq-filter do?'
+
+2. Claude uses elisp-dev-mcp to:
+   - Query Emacs documentation
+   - Find function definition
+   - Show examples
+   - Explain use cases
+
+3. Follow-up questions:
+   You: 'Show me an example of seq-filter'
+   You: 'What's the difference between seq-filter and cl-remove-if-not?'
+
+Benefits:
+✓ Access to actual Emacs help system
+✓ Context-aware responses
+✓ Can test code in your actual environment"))
+
+(demo-doc-lookup-workflow)
+#+END_SRC
+
+** Workflow 2: Interactive Code Development
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-interactive-dev-workflow ()
+  "Demonstrate interactive development workflow."
+  (interactive)
+  (message "Interactive Development Workflow:
+
+Scenario: Developing a new function
+
+1. Describe to Claude:
+   'I need a function that takes a list of numbers
+    and returns only the even ones, doubled'
+
+2. Claude generates code:
+   (defun double-evens (numbers)
+     (mapcar (lambda (n) (* n 2))
+             (seq-filter #'evenp numbers)))
+
+3. Test via MCP:
+   'Test this with (double-evens '(1 2 3 4 5))'
+   → MCP executes in your Emacs
+   → Returns: (4 8)
+
+4. Iterate:
+   'Add a docstring and type hints'
+   'What if the input is nil?'
+   'Add error handling'
+
+All testing happens in your actual Emacs environment!"))
+
+(demo-interactive-dev-workflow)
+#+END_SRC
+
+** Workflow 3: Debugging Assistance
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-debugging-workflow ()
+  "Demonstrate debugging with MCP."
+  (interactive)
+  ;; Create a buggy function for demonstration
+  (fset 'buggy-function
+        (lambda (x)
+          (/ 10 x)))  ; Bug: doesn't handle x=0
+
+  (message "Debugging Workflow:
+
+Scenario: Function crashes with certain inputs
+
+1. Share function with Claude:
+   'Here's my function: %s
+    It crashes when x is 0. Help me fix it.'
+
+2. Claude analyzes via MCP:
+   - Identifies division by zero
+   - Suggests fix with error handling
+
+3. Test the fix:
+   (defun safe-divide (x)
+     (if (zerop x)
+         (error \"Cannot divide by zero\")
+       (/ 10 x)))
+
+4. Verify via MCP:
+   'Test with (safe-divide 0)'
+   → Shows error message
+   'Test with (safe-divide 5)'
+   → Returns 2
+
+5. Add comprehensive tests:
+   'Generate ert tests for this function'"
+           (symbol-function 'buggy-function)))
+
+(demo-debugging-workflow)
+#+END_SRC
+
+* Advanced Features
+
+** Environment Introspection
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-environment-introspection ()
+  "Show what environment info is available via MCP."
+  (interactive)
+  (message "Environment Introspection via MCP:
+
+Claude can query your Emacs environment:
+
+1. Installed Packages:
+   (length package-activated-list) = %d packages
+
+2. Loaded Features:
+   (length features) = %d features
+
+3. Current Configuration:
+   - Theme: %s
+   - Font: %s
+   - Exec path: %s
+
+4. Open Buffers:
+   %d buffers currently open
+
+5. Recent Files:
+   %s
+
+Ask Claude to inspect any of these!"
+           (length package-activated-list)
+           (length features)
+           (if (boundp 'custom-enabled-themes)
+               (car custom-enabled-themes)
+             "none")
+           (face-attribute 'default :font)
+           (car exec-path)
+           (length (buffer-list))
+           (if (boundp 'recentf-list)
+               (mapconcat 'identity (seq-take recentf-list 3) ", ")
+             "N/A")))
+
+(demo-environment-introspection)
+#+END_SRC
+
+** Code Analysis
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-code-analysis ()
+  "Demonstrate code analysis capabilities."
+  (interactive)
+  ;; Example function to analyze
+  (fset 'example-function
+        (lambda (items)
+          (let ((result '()))
+            (dolist (item items)
+              (when (> item 0)
+                (push (* item 2) result)))
+            (nreverse result))))
+
+  (message "Code Analysis via MCP:
+
+Example function:
+%s
+
+Ask Claude to analyze:
+
+1. 'What does this function do?'
+   → Explains: filters positive, doubles, returns list
+
+2. 'Can you improve this?'
+   → Suggests: use mapcar and seq-filter
+
+3. 'Make it more functional'
+   → Rewrites using seq-map, seq-filter
+
+4. 'Add comprehensive documentation'
+   → Adds docstring, examples, type hints
+
+5. 'Compare performance with mapcar approach'
+   → Discusses trade-offs
+
+Claude uses MCP to test changes in real-time!"
+           (pp-to-string (symbol-function 'example-function))))
+
+(demo-code-analysis)
+#+END_SRC
+
+* Tips and Best Practices
+
+** Security Considerations
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-security-tips ()
+  "Important security considerations."
+  (interactive)
+  (message "Security Tips for elisp-dev-mcp:
+
+⚠️  IMPORTANT SECURITY NOTES:
+
+1. Code Execution:
+   - MCP can execute arbitrary elisp in your Emacs
+   - Only use with trusted AI assistants
+   - Review generated code before execution
+
+2. Data Access:
+   - MCP can access all Emacs data
+   - Be cautious with sensitive information
+   - Don't share private buffers with AI
+
+3. Server Security:
+   - Emacs server should only listen locally
+   - Check: (server-running-p) and server-name
+
+4. Best Practices:
+   ✓ Keep elisp-dev-mcp updated
+   ✓ Use separate Emacs for experiments
+   ✓ Review MCP logs regularly
+   ✓ Understand what AI can access
+
+5. Safe Usage:
+   - Test in scratch buffer first
+   - Use version control
+   - Don't auto-accept all changes"))
+
+(demo-security-tips)
+#+END_SRC
+
+** Performance Optimization
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-performance-tips ()
+  "Performance tips for MCP usage."
+  (interactive)
+  (message "Performance Tips:
+
+1. Minimize Round Trips:
+   - Ask specific questions
+   - Batch related queries
+   - Keep context relevant
+
+2. Efficient Queries:
+   Good: 'What does mapcar do?'
+   Bad:  'Tell me everything about every function'
+
+3. Local Testing:
+   - Test small code snippets
+   - Use scratch buffer
+   - Verify before applying to real code
+
+4. Server Optimization:
+   - Keep Emacs responsive
+   - Close unused buffers
+   - Limit server connections
+
+5. Selective Sharing:
+   - Only share relevant code
+   - Don't dump entire buffers unnecessarily
+   - Be specific about what needs analysis"))
+
+(demo-performance-tips)
+#+END_SRC
+
+** Troubleshooting
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-troubleshooting ()
+  "Common issues and solutions."
+  (interactive)
+  (message "Troubleshooting elisp-dev-mcp:
+
+❌ Problem: Claude can't connect to Emacs
+   ✓ Check: (server-running-p)
+   ✓ Solution: (server-start)
+   ✓ Verify: Server name matches config
+
+❌ Problem: MCP not found
+   ✓ Check: npx -y elisp-dev-mcp
+   ✓ Solution: Install Node.js/npm
+   ✓ Verify: node --version
+
+❌ Problem: Config not loading
+   ✓ Check: Config file location
+   ✓ Solution: Restart Claude Desktop
+   ✓ Verify: Valid JSON syntax
+
+❌ Problem: Commands fail
+   ✓ Check: Emacs error messages
+   ✓ Solution: Review *Messages* buffer
+   ✓ Verify: Function exists in Emacs
+
+❌ Problem: Slow responses
+   ✓ Check: Network connection
+   ✓ Solution: Simplify queries
+   ✓ Verify: Emacs not hanging
+
+Run this diagnostic:
+%s"
+           (format "Server: %s, Emacs: %s, Buffers: %d"
+                   (if (server-running-p) "OK" "FAILED")
+                   emacs-version
+                   (length (buffer-list)))))
+
+(demo-troubleshooting)
+#+END_SRC
+
+* Real-World Examples
+
+** Example 1: Package Development
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-package-development ()
+  "Example: Developing an Emacs package with MCP."
+  (interactive)
+  (message "Package Development Workflow:
+
+Scenario: Creating a new Emacs package
+
+1. Initial Setup:
+   You: 'Help me create a package structure for my-awesome-package'
+   Claude: Creates file templates with proper headers
+
+2. Function Development:
+   You: 'I need a function to parse JSON and cache results'
+   Claude: Writes function, tests via MCP
+
+3. Documentation:
+   You: 'Generate docstrings for all functions'
+   Claude: Adds comprehensive documentation
+
+4. Testing:
+   You: 'Create ert tests for my functions'
+   Claude: Generates test suite, runs via MCP
+
+5. Packaging:
+   You: 'Verify package-lint compliance'
+   Claude: Checks and fixes issues
+
+6. Publishing:
+   You: 'Generate MELPA recipe'
+   Claude: Creates proper recipe file
+
+All steps tested in your actual Emacs!"))
+
+(demo-package-development)
+#+END_SRC
+
+** Example 2: Configuration Optimization
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-config-optimization ()
+  "Example: Optimizing Emacs configuration."
+  (interactive)
+  (message "Configuration Optimization:
+
+Scenario: Speeding up Emacs startup
+
+1. Profiling:
+   You: 'My Emacs takes 5s to start. Help me profile it.'
+   Claude: Suggests esup, analyzes init.el
+
+2. Analysis:
+   You: 'What's slowing down my config?'
+   Claude: Via MCP, checks package loads, defers
+
+3. Optimization:
+   You: 'Convert my config to use use-package with :defer'
+   Claude: Refactors with proper lazy loading
+
+4. Verification:
+   You: 'Test if everything still works'
+   Claude: Runs checks via MCP
+
+5. Measurement:
+   You: 'Compare startup times'
+   Claude: Helps set up benchmark
+
+Result: Startup time reduced from 5s to 1s!"))
+
+(demo-config-optimization)
+#+END_SRC
+
+** Example 3: Learning Elisp
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-learning-elisp ()
+  "Example: Learning elisp with MCP assistance."
+  (interactive)
+  (message "Learning Elisp with MCP:
+
+Scenario: You're new to elisp
+
+1. Basic Concepts:
+   You: 'Explain let vs let* with examples'
+   Claude: Provides explanation, tests examples via MCP
+
+2. Practical Exercises:
+   You: 'Give me an exercise: write a function to reverse a list'
+   You: (your attempt)
+   Claude: Tests it, provides feedback
+
+3. Debugging:
+   You: 'Why doesn't this work: (mapcar #'+ '(1 2) '(3 4))'
+   Claude: Explains, shows correct version, tests it
+
+4. Best Practices:
+   You: 'Is this idiomatic elisp?'
+   Claude: Reviews code style, suggests improvements
+
+5. Advanced Topics:
+   You: 'How do I use macros?'
+   Claude: Explains, shows examples, tests expansions
+
+Interactive learning with immediate feedback!"))
+
+(demo-learning-elisp)
+#+END_SRC
+
+* Conclusion
+
+** Summary
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-summary ()
+  "Summarize elisp-dev-mcp capabilities."
+  (interactive)
+  (message "elisp-dev-mcp Summary:
+
+What it does:
+✓ Connects AI assistants to your Emacs
+✓ Enables interactive development
+✓ Provides documentation access
+✓ Allows code execution and testing
+✓ Facilitates environment inspection
+
+Key Benefits:
+✓ Real-time code testing
+✓ Context-aware assistance
+✓ Integrated documentation
+✓ Interactive debugging
+✓ Learning support
+
+Requirements:
+✓ Node.js and npm
+✓ Emacs with server-mode
+✓ MCP-compatible client (Claude Desktop)
+
+Get Started:
+1. Install: npx -y elisp-dev-mcp
+2. Configure Claude Desktop
+3. Start Emacs server
+4. Ask Claude for help!
+
+Next Steps:
+- Try simple queries
+- Test code snippets
+- Develop a small package
+- Optimize your config
+- Share your experience!"))
+
+(demo-summary)
+#+END_SRC
+
+** Resources
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-resources ()
+  "Display helpful resources."
+  (interactive)
+  (message "Helpful Resources:
+
+Official:
+- elisp-dev-mcp: https://github.com/ppbb/elisp-dev-mcp
+- MCP Specification: https://modelcontextprotocol.io/
+- Claude Desktop: https://claude.ai/download
+
+Emacs Documentation:
+- Elisp Manual: C-h i m Elisp RET
+- Emacs Manual: C-h i m Emacs RET
+- Function Help: C-h f
+- Variable Help: C-h v
+
+Community:
+- r/emacs: https://reddit.com/r/emacs
+- Emacs Stack Exchange: emacs.stackexchange.com
+- Emacs Discord: https://discord.gg/emacs
+
+Learning:
+- An Introduction to Programming in Emacs Lisp: C-h i m Intro Elisp RET
+- Emacs Lisp Development Tips: masteringemacs.org
+
+Tools:
+- MELPA: melpa.org
+- Emacs Wiki: emacswiki.org"))
+
+(demo-resources)
+#+END_SRC
+
+* Local Variables                                                  :ARCHIVE:
+# Local Variables:
+# eval: (org-babel-do-load-languages 'org-babel-load-languages '((emacs-lisp . t) (shell . t)))
+# End:

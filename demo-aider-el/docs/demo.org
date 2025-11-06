@@ -1,0 +1,492 @@
+#+TITLE: aider.el Interactive Demo
+#+AUTHOR: Emacs AI Study Group
+#+DATE: [2025-01-03]
+#+PROPERTY: header-args:emacs-lisp :results output :exports both
+#+STARTUP: showeverything
+
+* Introduction
+
+This document provides a hands-on, reproducible demonstration of aider.el, an Emacs
+interface to Aider, an AI pair programming tool.
+
+*Prerequisites:*
+- Aider installed: =pip install aider-chat=
+- API key for your LLM provider (OpenAI, Anthropic, etc.)
+- aider.el package installed
+
+*How to use this document:*
+1. Position cursor in any code block
+2. Press =C-c C-c= to execute the code
+3. Results will appear below the code block
+
+* Setup and Configuration
+
+** Bootstrap Package System (Required for emacs -Q)
+
+If you're running this with =emacs -Q=, execute this block first to set up the package system:
+
+#+BEGIN_SRC emacs-lisp
+;; Initialize package.el
+(require 'package)
+
+;; Add MELPA if not already present
+(unless (assoc "melpa" package-archives)
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t))
+
+;; Initialize packages
+(unless package--initialized
+  (package-initialize))
+
+;; Refresh package contents if needed
+(unless package-archive-contents
+  (message "Refreshing package archive contents...")
+  (package-refresh-contents))
+
+(message "✓ Package system initialized with MELPA")
+#+END_SRC
+
+** Install aider.el (If Not Already Installed)
+
+Note: aider.el may not be on MELPA yet. If installation fails, you'll need to install from GitHub using straight.el or manually.
+
+#+BEGIN_SRC emacs-lisp
+(unless (package-installed-p 'aider)
+  (message "Attempting to install aider from MELPA...")
+  (condition-case err
+      (progn
+        (package-install 'aider)
+        (message "✓ aider installed successfully"))
+    (error
+     (message "✗ aider not available on MELPA yet.\nInstall from: https://github.com/tninja/aider.el\nOr use straight.el"))))
+
+;; Try to load aider
+(require 'aider nil t)
+
+(if (featurep 'aider)
+    (message "✓ aider.el is loaded and ready!")
+  (message "✗ aider.el could not be loaded. Manual installation may be required."))
+#+END_SRC
+
+** Check if aider.el is loaded
+
+First, let's verify that aider.el is available in your Emacs environment.
+
+#+BEGIN_SRC emacs-lisp
+(if (featurep 'aider)
+    (message "✓ aider.el is loaded")
+  (message "✗ aider.el is not loaded. Execute the blocks above to install it, or install manually from GitHub."))
+#+END_SRC
+
+** Verify Aider Installation
+
+Check if the aider command-line tool is available.
+
+#+BEGIN_SRC emacs-lisp
+(let ((aider-path (executable-find "aider")))
+  (if aider-path
+      (message "✓ Aider found at: %s" aider-path)
+    (message "✗ Aider not found. Install with: pip install aider-chat")))
+#+END_SRC
+
+** Check API Key Configuration
+
+Verify that an API key is configured (checking common environment variables).
+
+#+BEGIN_SRC emacs-lisp
+(let ((openai-key (getenv "OPENAI_API_KEY"))
+      (anthropic-key (getenv "ANTHROPIC_API_KEY")))
+  (cond
+   (openai-key (message "✓ OpenAI API key is configured"))
+   (anthropic-key (message "✓ Anthropic API key is configured"))
+   (t (message "✗ No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY"))))
+#+END_SRC
+
+* Basic Usage Demonstrations
+
+** Understanding aider.el Commands
+
+List the main interactive commands provided by aider.el.
+
+#+BEGIN_SRC emacs-lisp
+(let ((commands '()))
+  (mapatoms
+   (lambda (symbol)
+     (when (and (commandp symbol)
+                (string-prefix-p "aider-" (symbol-name symbol)))
+       (push symbol commands))))
+  (message "Available aider commands:\n%s"
+           (mapconcat (lambda (cmd)
+                        (format "  - %s: %s"
+                                cmd
+                                (or (documentation cmd) "No description")))
+                      (sort commands #'string<)
+                      "\n")))
+#+END_SRC
+
+** Configuration Example
+
+Here's how to configure aider.el programmatically:
+
+#+BEGIN_SRC emacs-lisp
+;; Example configuration (adjust to your needs)
+(with-eval-after-load 'aider
+  ;; Set the model (examples for different providers)
+  ;; (setq aider-args '("--model" "gpt-4"))
+  ;; (setq aider-args '("--model" "claude-3-5-sonnet-20241022"))
+  ;; (setq aider-args '("--model" "ollama/codellama"))
+
+  ;; Show what configuration would be set
+  (message "Example aider configuration:
+  - Default model: GPT-4
+  - Auto-commits: enabled
+  - Stream responses: yes"))
+#+END_SRC
+
+* Practical Workflow Examples
+
+** Example 1: Starting an Aider Session
+
+This demonstrates the typical workflow for starting an aider session.
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-start-aider ()
+  "Demonstrate starting an aider session."
+  (interactive)
+  (message "To start an aider session:
+1. Open a file in your project: C-x C-f
+2. Run: M-x aider
+3. Or use custom keybinding: C-c a a
+
+The aider buffer will open where you can:
+- Ask questions about your code
+- Request code changes
+- Have aider edit files directly
+- Use /help for available commands"))
+
+(demo-start-aider)
+#+END_SRC
+
+** Example 2: Common Aider Commands
+
+Understanding the command-line interface within aider.
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-aider-commands ()
+  "Show common aider commands."
+  (interactive)
+  (with-temp-buffer
+    (insert "Common Aider Commands (use in aider chat buffer):\n\n")
+    (insert "/add FILE       - Add file to the chat session\n")
+    (insert "/drop FILE      - Remove file from session\n")
+    (insert "/undo          - Undo last change\n")
+    (insert "/diff          - Show diff of pending changes\n")
+    (insert "/commit        - Commit changes with message\n")
+    (insert "/help          - Show all commands\n")
+    (insert "/ls            - List files in chat\n")
+    (insert "/model MODEL   - Switch to different model\n")
+    (insert "/quit          - Exit aider\n\n")
+    (insert "Example workflow:\n")
+    (insert "1. Ask: 'Add error handling to this function'\n")
+    (insert "2. Review the changes\n")
+    (insert "3. Type /diff to see what changed\n")
+    (insert "4. Type /commit to commit or /undo to revert\n")
+    (message "%s" (buffer-string))))
+
+(demo-aider-commands)
+#+END_SRC
+
+** Example 3: Working with Multiple Files
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-multi-file-workflow ()
+  "Demonstrate working with multiple files."
+  (interactive)
+  (message "Multi-file workflow example:
+
+Scenario: Refactoring code across multiple files
+
+1. Start aider: M-x aider
+2. Add files to session:
+   /add src/utils.el
+   /add src/main.el
+   /add tests/test-utils.el
+
+3. Make a request:
+   'Refactor the parse-config function to use cl-lib
+    and update all callers and tests'
+
+4. Aider will:
+   - Analyze all files
+   - Make coordinated changes
+   - Maintain consistency across files
+
+5. Review with /diff, then /commit or /undo"))
+
+(demo-multi-file-workflow)
+#+END_SRC
+
+* Advanced Features
+
+** Working with Different Models
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-model-switching ()
+  "Demonstrate model configuration options."
+  (interactive)
+  (let ((models '(("GPT-4" "gpt-4" "Most capable, slower, more expensive")
+                  ("GPT-3.5 Turbo" "gpt-3.5-turbo" "Fast, good for simple tasks")
+                  ("Claude 3.5 Sonnet" "claude-3-5-sonnet-20241022" "Excellent coding, large context")
+                  ("Claude 3.5 Haiku" "claude-3-5-haiku-20241022" "Fast, cost-effective")
+                  ("Ollama/CodeLlama" "ollama/codellama" "Local, free, private"))))
+    (message "Available Models:\n\n%s\n\nSwitch models with: /model MODEL_NAME"
+             (mapconcat (lambda (m)
+                          (format "%-20s (%-30s)\n  → %s"
+                                  (nth 0 m) (nth 1 m) (nth 2 m)))
+                        models
+                        "\n\n"))))
+
+(demo-model-switching)
+#+END_SRC
+
+** Git Integration
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-git-integration ()
+  "Demonstrate aider's git integration features."
+  (interactive)
+  (message "Aider Git Integration:
+
+Aider automatically:
+✓ Creates commits for each change
+✓ Generates descriptive commit messages
+✓ Tracks all modifications
+✓ Supports undo via /undo
+
+Manual git control:
+- /commit MSG    - Commit with custom message
+- /diff          - See pending changes
+- /undo          - Revert last change
+
+Best practices:
+1. Work in a git repository
+2. Let aider auto-commit (easier to undo)
+3. Use /diff before accepting changes
+4. Create a branch for experiments:
+   git checkout -b ai-experiment"))
+
+(demo-git-integration)
+#+END_SRC
+
+* Real-World Use Cases
+
+** Use Case 1: Bug Fixing
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-bug-fixing ()
+  "Example bug fixing workflow."
+  (interactive)
+  (message "Bug Fixing with Aider:
+
+Step-by-step example:
+
+1. Identify the bug:
+   - Open the buggy file
+   - M-x aider
+   - /add src/buggy-file.el
+
+2. Describe the issue:
+   'This function throws an error when input is nil.
+    Add proper nil checking and return a sensible default.'
+
+3. Aider will:
+   - Analyze the code
+   - Propose a fix
+   - Implement the changes
+
+4. Verify:
+   - Review the diff with /diff
+   - Test the fix
+   - Commit with /commit or undo with /undo
+
+5. Follow up:
+   'Add a unit test for the nil case'"))
+
+(demo-bug-fixing)
+#+END_SRC
+
+** Use Case 2: Feature Implementation
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-feature-implementation ()
+  "Example feature implementation workflow."
+  (interactive)
+  (message "Feature Implementation with Aider:
+
+Example: Adding a caching layer
+
+1. Setup:
+   M-x aider
+   /add src/api-client.el
+   /add tests/test-api-client.el
+
+2. Request:
+   'Add a simple in-memory cache to the API client.
+    Cache responses for 5 minutes.
+    Add cache-clear function.
+    Update tests to verify caching behavior.'
+
+3. Iterative refinement:
+   - 'Make the cache TTL configurable'
+   - 'Add cache statistics (hits/misses)'
+   - 'Add docstrings to new functions'
+
+4. Documentation:
+   - /add README.md
+   - 'Update README with caching documentation'"))
+
+(demo-feature-implementation)
+#+END_SRC
+
+** Use Case 3: Code Refactoring
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-refactoring ()
+  "Example refactoring workflow."
+  (interactive)
+  (message "Refactoring with Aider:
+
+Example: Modernizing elisp code
+
+1. Add files:
+   /add src/legacy-code.el
+   /add tests/test-legacy-code.el
+
+2. Request comprehensive refactoring:
+   'Refactor this code to:
+    - Use cl-lib instead of cl
+    - Replace obsolete functions
+    - Add type hints with checkdoc
+    - Improve function names for clarity
+    - Add comprehensive docstrings
+    - Update tests accordingly'
+
+3. Review each change:
+   - /diff shows all modifications
+   - Ask for explanations: 'Why did you change X to Y?'
+
+4. Iterative improvement:
+   - 'Split the large function into smaller ones'
+   - 'Add error handling for edge cases'"))
+
+(demo-refactoring)
+#+END_SRC
+
+* Tips and Best Practices
+
+** Performance Tips
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-performance-tips ()
+  "Performance and efficiency tips."
+  (interactive)
+  (message "Aider Performance Tips:
+
+1. Model Selection:
+   - Use GPT-3.5/Haiku for simple tasks (faster, cheaper)
+   - Use GPT-4/Sonnet for complex refactoring
+   - Use local models (Ollama) for privacy/offline work
+
+2. Context Management:
+   - Only /add files that are relevant
+   - Use /drop to remove unneeded files
+   - Smaller context = faster responses
+
+3. Prompt Engineering:
+   - Be specific and clear
+   - Provide examples when needed
+   - Break large tasks into steps
+
+4. Workflow:
+   - Review changes with /diff before committing
+   - Use /undo liberally - it's safe to experiment
+   - Keep aider sessions focused on one task"))
+
+(demo-performance-tips)
+#+END_SRC
+
+** Common Pitfalls
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-common-pitfalls ()
+  "Common pitfalls and how to avoid them."
+  (interactive)
+  (message "Common Pitfalls:
+
+❌ PITFALL: Adding too many files
+   ✓ SOLUTION: Only add relevant files, use /drop
+
+❌ PITFALL: Vague requests
+   ✓ SOLUTION: Be specific: 'Add X to Y using Z approach'
+
+❌ PITFALL: Not reviewing changes
+   ✓ SOLUTION: Always use /diff before accepting
+
+❌ PITFALL: Working without git
+   ✓ SOLUTION: Initialize repo first: git init
+
+❌ PITFALL: Not using /undo when needed
+   ✓ SOLUTION: /undo is your friend - use it!
+
+❌ PITFALL: Forgetting to test AI changes
+   ✓ SOLUTION: Always test before committing
+
+❌ PITFALL: Using expensive models for simple tasks
+   ✓ SOLUTION: Match model to task complexity"))
+
+(demo-common-pitfalls)
+#+END_SRC
+
+* Conclusion
+
+** Next Steps
+
+#+BEGIN_SRC emacs-lisp
+(defun demo-next-steps ()
+  "Suggest next steps for learning aider.el."
+  (interactive)
+  (message "Next Steps:
+
+1. Practice:
+   - Start with a small project
+   - Try simple refactoring tasks
+   - Experiment with /undo safely
+
+2. Explore:
+   - Try different models
+   - Use aider for code review
+   - Generate tests with AI
+
+3. Integrate:
+   - Add aider to your workflow
+   - Create custom keybindings
+   - Combine with other Emacs tools
+
+4. Learn More:
+   - GitHub: https://github.com/tninja/aider.el
+   - Aider docs: https://aider.chat/docs/
+   - Join discussions and share tips
+
+5. Experiment with this demo:
+   - Execute each code block with C-c C-c
+   - Modify examples to match your needs
+   - Add your own use cases below
+
+Happy AI-assisted coding! 🚀"))
+
+(demo-next-steps)
+#+END_SRC
+
+* Local Variables                                                  :ARCHIVE:
+# Local Variables:
+# eval: (org-babel-do-load-languages 'org-babel-load-languages '((emacs-lisp . t)))
+# End:
